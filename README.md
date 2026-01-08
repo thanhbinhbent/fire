@@ -72,7 +72,7 @@ FIRE is compared against state-of-the-art frameworks including **FactCheckGPT**,
 
 ```bash
 # Clone the repository
-git clone https://github.com/mbzuai-nlp/fire.git
+git clone https://github.com/thanhbinhbent/fire
 cd fire
 
 # Create a virtual environment (recommended)
