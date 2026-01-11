@@ -159,15 +159,12 @@ class QueryDeduplicator:
         }
 
 
-# Global instance
 deduplicator = QueryDeduplicator()
 
 
-# Testing
 if __name__ == "__main__":
     print("Testing query deduplicator...")
     
-    # Test queries
     query1 = "COVID-19 vaccine effectiveness"
     query2 = "vaccine COVID-19 effective"
     query3 = "Vietnam population 2024"
