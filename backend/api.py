@@ -151,8 +151,24 @@ async def check_fact(request: FactCheckRequest):
                     url_match = re.search(r'https?://[^\s]+', result_text)
                     source_url = url_match.group(0) if url_match else f"https://google.com/search?q={search.get('query', '')}"
                     
-                    title_match = result_text.split('.')[0] if '.' in result_text else search.get('query', '')
-                    title = title_match[:100] if len(title_match) > 100 else title_match
+                    # Extract title more intelligently
+                    title = None
+                    # Try to extract domain from parentheses like "(Chinhphu.vn)"
+                    domain_match = re.match(r'\(([^)]+)\)\s*[-–—]', result_text)
+                    if domain_match:
+                        title = domain_match.group(1)
+                    else:
+                        # Try to get text before " - ", ". " or just first 50 chars
+                        if ' - ' in result_text:
+                            title = result_text.split(' - ')[0]
+                        elif '. ' in result_text:
+                            title = result_text.split('. ')[0]
+                        else:
+                            title = result_text[:50]
+                    
+                    # Clean up and limit title length
+                    title = title.strip('()')
+                    title = title[:100] if len(title) > 100 else title
                     
                     sources.append({
                         "url": source_url,

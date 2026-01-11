@@ -294,9 +294,9 @@ export function FactCheckChat() {
 
         {/* Chat Messages */}
         <div className="flex-1 overflow-hidden">
-          <div className="h-full">
-            <Card className="h-full flex flex-col shadow-sm border-none bg-background rounded-none">
-              <ScrollArea className="flex-1 p-3 md:p-4 lg:p-6">
+          <Card className="h-full flex flex-col shadow-sm border-none bg-background rounded-none">
+            <ScrollArea className="flex-1 h-0">
+              <div className="p-3 md:p-4 lg:p-6">
                 <div className="max-w-4xl mx-auto space-y-4">
                   {currentConversation.messages.map((message, index) => (
                     <div
@@ -507,53 +507,53 @@ export function FactCheckChat() {
                   )}
                   <div ref={messagesEndRef} />
                 </div>
-              </ScrollArea>
-
-              {/* Input Area */}
-              <div className="p-3 md:p-4 lg:p-6 border-t bg-slate-50 dark:bg-slate-900">
-                <div className="max-w-4xl mx-auto">
-                  <form onSubmit={handleSubmit} className="flex gap-2 md:gap-3">
-                    <Textarea
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Nhập thông tin cần kiểm tra..."
-                      className="min-h-[56px] md:min-h-[64px] max-h-[120px] resize-none text-sm md:text-base"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSubmit(e);
-                        }
-                      }}
-                      disabled={isLoading}
-                    />
-                    <Button
-                      type="submit"
-                      size="icon"
-                      className="h-[56px] w-[56px] md:h-[64px] md:w-[64px] shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground"
-                      disabled={!input.trim() || isLoading}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-5 w-5 md:h-6 md:w-6 animate-spin" />
-                      ) : (
-                        <Send className="h-5 w-5 md:h-6 md:w-6" />
-                      )}
-                    </Button>
-                  </form>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center hidden md:block">
-                    Nhấn{" "}
-                    <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-xs">
-                      Enter
-                    </kbd>{" "}
-                    để gửi •{" "}
-                    <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-xs">
-                      Shift + Enter
-                    </kbd>{" "}
-                    để xuống dòng
-                  </p>
-                </div>
               </div>
-            </Card>
-          </div>
+            </ScrollArea>
+
+            {/* Input Area */}
+            <div className="p-3 md:p-4 lg:p-6 border-t bg-slate-50 dark:bg-slate-900">
+              <div className="max-w-4xl mx-auto">
+                <form onSubmit={handleSubmit} className="flex gap-2 md:gap-3">
+                  <Textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Nhập thông tin cần kiểm tra..."
+                    className="min-h-[56px] md:min-h-[64px] max-h-[120px] resize-none text-sm md:text-base"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmit(e);
+                      }
+                    }}
+                    disabled={isLoading}
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="h-[56px] w-[56px] md:h-[64px] md:w-[64px] shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    disabled={!input.trim() || isLoading}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-5 w-5 md:h-6 md:w-6 animate-spin" />
+                    ) : (
+                      <Send className="h-5 w-5 md:h-6 md:w-6" />
+                    )}
+                  </Button>
+                </form>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center hidden md:block">
+                  Nhấn{" "}
+                  <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-xs">
+                    Enter
+                  </kbd>{" "}
+                  để gửi •{" "}
+                  <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-xs">
+                    Shift + Enter
+                  </kbd>{" "}
+                  để xuống dòng
+                </p>
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
     </div>
