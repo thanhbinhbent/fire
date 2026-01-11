@@ -133,7 +133,6 @@ calibrator = ConfidenceCalibrator()
 
 
 if __name__ == "__main__":
-    print("Testing confidence calibrator...")
     
     conf = calibrator.calculate_confidence(
         verdict="SUPPORTS",
@@ -143,7 +142,6 @@ if __name__ == "__main__":
         evidence_count=3,
         evidence_quality=0.8
     )
-    print(f"Confidence: {conf:.3f}")
     
     is_conf = calibrator.is_confident(conf, claim_complexity=50)
     print(f"Is confident: {is_conf}")

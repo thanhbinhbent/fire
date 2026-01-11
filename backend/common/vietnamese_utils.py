@@ -44,7 +44,7 @@ class VietnamesePreprocessor:
         try:
             return sent_tokenize(text)
         except Exception as e:
-            print(f"⚠️ Sentence tokenization error: {e}")
+            print(f"Sentence tokenization error: {e}")
             return [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
 
     def tokenize_words(self, text: str) -> List[str]:
@@ -52,7 +52,7 @@ class VietnamesePreprocessor:
         try:
             return word_tokenize(text, format="text").split()
         except Exception as e:
-            print(f"⚠️ Word tokenization error: {e}")
+            print(f"Word tokenization error: {e}")
             return text.split()
 
     def extract_entities(self, text: str) -> List[Dict]:
@@ -74,7 +74,7 @@ class VietnamesePreprocessor:
 
             return results
         except Exception as e:
-            print(f"⚠️ Entity extraction error: {e}")
+            print(f"Entity extraction error: {e}")
             return []
 
     def preprocess_claim(self, claim: str) -> Dict:
@@ -104,9 +104,7 @@ if __name__ == "__main__":
     test_claim = "TP.HCM có hơn 10 triệu dân vào năm 2024"
     result = preprocessor.preprocess_claim(test_claim)
     
-    print("Preprocessing Test:")
     print(f"Original: {result['original']}")
     print(f"Normalized: {result['normalized']}")
     print(f"Tokens: {result['tokens'][:10]}")
-    print(f"Entities: {result['entities']}")
     print(f"Token count: {result['token_count']}")

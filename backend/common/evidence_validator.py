@@ -203,7 +203,6 @@ validator = EvidenceValidator()
 
 
 if __name__ == "__main__":
-    print("Testing evidence validator...")
     
     cred1 = validator.get_source_credibility("https://vnexpress.net/article")
     print(f"VNExpress credibility: {cred1}")

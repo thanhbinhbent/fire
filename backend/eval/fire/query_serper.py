@@ -14,7 +14,7 @@ try:
     VIETNAMESE_SUPPORT = True
 except ImportError:
     VIETNAMESE_SUPPORT = False
-    print("⚠️ Vietnamese utilities not available")
+    print("Vietnamese utilities not available")
 
 
 class SerperAPI:
@@ -179,7 +179,7 @@ def enhance_vietnamese_query(
                 if entity.lower() not in query.lower():
                     enhanced = f"{enhanced} {entity}"
         except Exception as e:
-            print(f"⚠️ Entity extraction failed: {e}")
+            print(f"Entity extraction failed: {e}")
     
     if prefer_vietnamese:
         tier1_sources = ["vnexpress.net", "tuoitre.vn", "thanhnien.vn"]

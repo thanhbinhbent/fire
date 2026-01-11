@@ -90,7 +90,6 @@ class FactCheckDB:
 
         conn.commit()
         conn.close()
-        print("Database initialized successfully")
 
     def cache_search(self, query: str, results: str):
         """Cache search results to avoid redundant API calls."""
@@ -211,7 +210,6 @@ db = FactCheckDB()
 
 
 if __name__ == "__main__":
-    print("Testing database...")
     
     db.cache_search("test query", "test results")
     cached = db.get_cached_search("test query")

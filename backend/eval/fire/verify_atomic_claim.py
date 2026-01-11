@@ -125,7 +125,6 @@ def call_search(
     if VIETNAMESE_SUPPORT:
         is_dup, similarity = query_deduplicator.check_and_add(search_query)
         if is_dup:
-            print(f"⚠️ Skipping duplicate query (similarity={similarity:.2f}): {search_query[:50]}...")
             return "[Duplicate query - skipped to reduce API costs]"
     
     if VIETNAMESE_SUPPORT:
@@ -287,7 +286,7 @@ def verify_atomic_claim(
                 preprocessed_claim = str(processed_result)
             print(f"Preprocessed claim: {preprocessed_claim[:100]}...")
         except Exception as e:
-            print(f"⚠️ Preprocessing failed, using original claim: {e}")
+            print(f"Preprocessing failed, using original claim: {e}")
             preprocessed_claim = atomic_claim
     
     search_results = []
@@ -320,9 +319,9 @@ def verify_atomic_claim(
             search_results.append(answer_or_next_search)
         elif isinstance(answer_or_next_search, FinalAnswer):
             if len(search_results) < min_searches:
-                print(f"⚠️ LLM tried to answer without search. Forcing search... (Step {step+1}/{max_steps})")
+                print(f"LLM tried to answer without search. Forcing search... (Step {step+1}/{max_steps})")
                 default_query = f"{atomic_claim} hiện nay 2024"
-                print(f"🔍 Auto-generated query: {default_query}")
+                print(f"Auto-generated query: {default_query}")
                 search_result_text = call_search(default_query, atomic_claim=atomic_claim)
                 search_results.append(GoogleSearchResult(query=default_query, result=search_result_text))
                 continue
@@ -371,12 +370,10 @@ def verify_atomic_claim(
                         searches=[{'query': s.query, 'result': s.result} for s in search_results]
                     )
                     
-                    print(f"Confidence: {confidence:.3f}, Is confident: {is_confident}")
-                    print(f"🏷️ Verdict: {verdict_label}")
                     
                 except Exception as e:
                     import traceback
-                    print(f"⚠️ Vietnamese enhancements failed: {e}")
+                    print(f"Vietnamese enhancements failed: {e}")
                     traceback.print_exc()
             
             search_dicts = {
@@ -427,8 +424,6 @@ def verify_atomic_claim(
                 searches=[{'query': s.query, 'result': s.result} for s in search_results]
             )
             
-            print(f"Final Confidence: {confidence:.3f}")
-            print(f"🏷️ Final Verdict: {verdict_label}")
         except Exception as e:
             print(f"Vietnamese final enhancements failed: {e}")
     

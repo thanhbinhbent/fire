@@ -34,16 +34,14 @@ class QueryDeduplicator:
             return
         
         try:
-            print(f"📥 Loading embedding model: {self.model_name}")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self.model = AutoModel.from_pretrained(self.model_name)
             self.model.eval()
             
             if torch.cuda.is_available():
                 self.model = self.model.cuda()
-                print("Model loaded on GPU")
             else:
-                print("Model loaded on CPU")
+                self.model = self.model.cpu()
             
             self._model_loaded = True
         except Exception as e:
@@ -138,9 +136,8 @@ class QueryDeduplicator:
 
         if not is_dup:
             self.add_query(query)
-            print(f"Added new query: {query[:50]}...")
         else:
-            print(f"Skipping duplicate query (similarity={similarity:.2f}): {query[:50]}...")
+            pass
 
         return is_dup, similarity
 
@@ -163,7 +160,6 @@ deduplicator = QueryDeduplicator()
 
 
 if __name__ == "__main__":
-    print("Testing query deduplicator...")
     
     query1 = "COVID-19 vaccine effectiveness"
     query2 = "vaccine COVID-19 effective"

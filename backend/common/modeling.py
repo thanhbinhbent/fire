@@ -64,7 +64,6 @@ class Model:
         
         self._setup_api_keys()
         
-        print(f"🚀 Initialized LiteLLM model: {self.model_name}")
     
     def _parse_model_name(self, model_name: str) -> str:
         """Parse model name to LiteLLM format.
@@ -152,14 +151,14 @@ class Model:
                 }
             
             if self.show_responses:
-                print(f"\n💬 Response:\n{content}\n")
+                print(f"\nResponse:\n{content}\n")
                 if usage:
-                    print(f"📊 Usage: {usage}")
+                    print(f"Usage: {usage}")
             
             return content, usage
             
         except Exception as e:
-            print(f"❌ LiteLLM generation error: {e}")
+            print(f"LiteLLM generation error: {e}")
             raise
 
 
@@ -189,9 +188,9 @@ class Model:
             'together_ai', 'huggingface', 'replicate', 'bedrock', 'vertex_ai',
             'palm', 'ollama', 'deepseek', 'mistral', 'perplexity', 'fireworks_ai'
         ]
-        print("\n🌐 Supported LLM Providers (100+):")
+        print("\nSupported LLM Providers (100+):")
         print("  " + ", ".join(providers))
-        print("\n📚 Full list: https://docs.litellm.ai/docs/providers")
+        print("\nFull list: https://docs.litellm.ai/docs/providers")
 
 
 

@@ -35,10 +35,8 @@ class ViFactCheckLoader:
             Dataset object or DatasetDict
         """
         if self.dataset is not None:
-            print(f"Using cached dataset from memory")
             return self.dataset
 
-        print(f"📥 Loading ViFactCheck dataset from HuggingFace...")
 
         try:
             if split:
@@ -59,7 +57,7 @@ class ViFactCheckLoader:
             return self.dataset
 
         except Exception as e:
-            print(f"❌ Error loading dataset: {e}")
+            print(f"Error loading dataset: {e}")
             raise
 
     def get_sample(self, index: int = 0, split: str = "train") -> Dict:
@@ -104,7 +102,7 @@ class ViFactCheckLoader:
             self.load_dataset()
 
         dataset_split = self.dataset[split] if isinstance(self.dataset, dict) else self.dataset
-        print(f"🔄 Converting {len(dataset_split)} samples to FIRE format...")
+        print(f"Converting {len(dataset_split)} samples to FIRE format...")
 
         converted = []
         for sample in dataset_split:
@@ -192,7 +190,7 @@ class ViFactCheckLoader:
 
         data = self.dataset[split] if isinstance(self.dataset, dict) else self.dataset
 
-        print(f"\n📋 Sample claims from '{split}' split:")
+        print(f"\nSample claims from '{split}' split:")
         print("=" * 80)
         for i in range(min(n, len(data))):
             sample = data[i]
@@ -211,7 +209,7 @@ if __name__ == "__main__":
     dataset = loader.load_dataset()
 
     stats = loader.get_statistics()
-    print("\n📊 Dataset Statistics:")
+    print("\nDataset Statistics:")
     print(json.dumps(stats, indent=2, ensure_ascii=False))
 
     loader.print_sample_claims(n=3)

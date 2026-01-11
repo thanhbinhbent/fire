@@ -65,7 +65,7 @@ def main():
     dataset_path = f'datasets/{benchmark}/data.jsonl'
 
     if not os.path.exists(dataset_path):
-        print(f"❌ Error: Dataset file not found: {dataset_path}")
+        print(f"Error: Dataset file not found: {dataset_path}")
         print(f"Available datasets:")
         for root, dirs, files in os.walk('datasets'):
             for file in files:
@@ -73,7 +73,7 @@ def main():
                     print(f"  - {os.path.join(root, file)}")
         return
 
-    print(f"🔥 FIRE Fact-Checking Framework")
+    print(f"FIRE Fact-Checking Framework")
     print(f"=" * 60)
     print(f"Model:     {model_name_full}")
     print(f"Dataset:   {benchmark}")
@@ -81,7 +81,7 @@ def main():
     print(f"=" * 60)
 
     with get_openai_callback() as cb:
-        print(f'\n🚀 Running model: {model_name_full}')
+        print(f'\nRunning model: {model_name_full}')
         rater = Model(model_name_full)
         failed_cnt = 0
         model_name = model_name_full.split(':')[-1].split('/')[-1]
@@ -99,7 +99,7 @@ def main():
         if args.limit:
             lines = lines[:args.limit]
 
-        print(f"📊 Processing {len(lines)} claims...")
+        print(f"Processing {len(lines)} claims...")
 
         with open(output_file, 'w', encoding='utf-8') as fout:
             for line in tqdm(lines, desc="Processing claims"):
@@ -128,18 +128,17 @@ def main():
                     }, ensure_ascii=False) + '\n')
 
                 except Exception as e:
-                    print(f"\n⚠️  Error processing claim: {claim[:50]}...")
+                    print(f"\nError processing claim: {claim[:50]}...")
                     print(f"   Error: {str(e)}")
                     failed_cnt += 1
                     continue
 
         print(f"\n" + "=" * 60)
         print(f'All fact checking results saved to: {output_file}')
-        print(f'❌ Failed claims: {failed_cnt}')
-        print(f"\n📊 Token Usage:")
+        print(f'Failed claims: {failed_cnt}')
         print(f"   Input tokens:  {total_usage['input_tokens']:,}")
         print(f"   Output tokens: {total_usage['output_tokens']:,}")
-        print(f"\n💰 Cost Information:")
+        print(f"\nCost Information:")
         print(cb)
         print("=" * 60)
 

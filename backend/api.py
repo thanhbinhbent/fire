@@ -18,19 +18,9 @@ try:
     from eval.fire.verify_atomic_claim import verify_atomic_claim
     VIETNAMESE_SUPPORT = True
 except ImportError as e:
-    print(f"Some Vietnamese components not available: {e}")
+    print(f"Import error: {e}")
     VIETNAMESE_SUPPORT = False
     verify_atomic_claim = None
-
-app = FastAPI(title="Vietnamese Fact Checking API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 rater = None
 
@@ -46,11 +36,9 @@ try:
         temperature=shared_config.default_temperature,
         max_tokens=shared_config.default_max_tokens
     )
-    print(f"Model initialized: {shared_config.default_model_name}")
-    print(f"Temperature: {shared_config.default_temperature}")
-    print(f"Max tokens: {shared_config.default_max_tokens}")
+    print(f"Model: {shared_config.default_model_name}, Temp: {shared_config.default_temperature}")
 except Exception as e:
-    print(f"Model initialization failed: {e}")
+    print(f"Model init failed: {e}")
 
 
 class FactCheckRequest(BaseModel):
@@ -66,39 +54,35 @@ class FactCheckResponse(BaseModel):
     metadata: Optional[Dict] = None
 
 
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.get("/")
 async def root():
     return {
         "message": "Vietnamese Fact Checking API",
-        "version": "2.0.0 (Enhanced Architecture)",
         "model": shared_config.default_model_name,
-        "temperature": shared_config.default_temperature,
         "vietnamese_support": VIETNAMESE_SUPPORT,
-        "features": [
-            "Three-layer Vietnamese optimization",
-            "Embedding-based query deduplication",
-            "Dynamic confidence calibration",
-            "Vietnamese-aware evidence validation"
-        ]
     }
 
 
 @app.post("/api/check", response_model=FactCheckResponse)
 async def check_fact(request: FactCheckRequest):
-    """
-    Kiểm tra tính chính xác của thông tin bằng tiếng Việt.
-    
-    THREE-LAYER VIETNAMESE ARCHITECTURE:
-    1. Preprocessing: Normalize, extract entities
-    2. Query Generation: Deduplicate, enhance for Vietnamese
-    3. Evidence Validation: Score credibility and relevance
-    """
     if not rater:
         raise HTTPException(status_code=503, detail="Model not initialized")
     
     try:
         model_instance = rater
-        if request.model:
+        
+        if request.model and request.model != shared_config.default_model_name:
             try:
                 model_instance = Model(
                     model_name=request.model,
@@ -114,13 +98,11 @@ async def check_fact(request: FactCheckRequest):
             try:
                 processed = preprocessor.preprocess_claim(request.claim)
                 entities = [e['text'] for e in processed['entities']]
-                print(f"Preprocessed: {processed['normalized']}")
-                print(f"🏷️ Entities: {entities}")
             except Exception as e:
                 print(f"Preprocessing error: {e}")
         
         if verify_atomic_claim and VIETNAMESE_SUPPORT:
-            print(f"🔍 Starting verification for: {request.claim}")
+            print(f"Starting verification: {request.claim}")
             
             final_answer, search_results, usage = verify_atomic_claim(
                 atomic_claim=request.claim,
@@ -132,7 +114,7 @@ async def check_fact(request: FactCheckRequest):
             )
             
             google_searches = search_results.get('google_searches', [])
-            print(f"📊 Verification complete. Searches: {len(google_searches)}")
+            print(f"Verification complete. Searches: {len(google_searches)}")
             
             if final_answer:
                 verdict = final_answer.answer
@@ -214,43 +196,13 @@ async def check_fact(request: FactCheckRequest):
                     metadata=metadata
                 )
             else:
-                raise HTTPException(status_code=500, detail="Verification failed - no final answer")
+                raise HTTPException(status_code=500, detail="Verification failed")
         
         else:
-            verdict = "Đúng (Chắc chắn)"
-            explanation = f"Mock response - Claim đã được xử lý: {processed['normalized'] if processed else request.claim}"
-            confidence = 0.75
-            
-            sources = [
-                {
-                    "url": "https://vnexpress.net",
-                    "title": "Example source (Mock)",
-                    "snippet": "This is mock data. Real verification not available.",
-                    "credibility": 1.0,
-                    "relevance": 0.8,
-                }
-            ]
-            
-            metadata = {
-                "preprocessing": {
-                    "normalized": processed['normalized'] if processed else request.claim,
-                    "entities": entities,
-                    "token_count": processed['token_count'] if processed else len(request.claim.split()),
-                },
-                "vietnamese_support": VIETNAMESE_SUPPORT,
-                "mode": "mock"
-            }
-            
-            return FactCheckResponse(
-                verdict=verdict,
-                explanation=explanation,
-                sources=sources,
-                confidence=confidence,
-                metadata=metadata
-            )
+            raise HTTPException(status_code=503, detail="Verification not available")
     
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"Error: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -258,54 +210,31 @@ async def check_fact(request: FactCheckRequest):
 
 @app.get("/api/health")
 async def health():
-    """Health check endpoint."""
-    status = {
+    return {
         "status": "healthy",
         "model": shared_config.default_model_name,
-        "temperature": shared_config.default_temperature,
-        "max_tokens": shared_config.default_max_tokens,
         "model_loaded": rater is not None,
     }
-    
-    if VIETNAMESE_SUPPORT:
-        status["vietnamese_components"] = {
-            "preprocessor": "loaded",
-            "database": "loaded",
-            "calibrator": "loaded",
-            "deduplicator": "loaded",
-            "validator": "loaded",
-        }
-    
-    return status
 
 
 @app.get("/api/stats")
 async def get_stats():
-    """Get system statistics."""
     stats = {
         "model": shared_config.default_model_name,
-        "temperature": shared_config.default_temperature,
         "vietnamese_support": VIETNAMESE_SUPPORT,
     }
     
     if VIETNAMESE_SUPPORT:
         try:
             stats["deduplication"] = deduplicator.get_stats()
-            stats["database"] = {
-                "path": db.db_path,
-                "recent_verifications": len(db.get_recent_verifications(10))
-            }
-        except Exception as e:
-            stats["error"] = str(e)
+        except Exception:
+            pass
     
     return stats
 
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting Vietnamese Fact Checking API...")
-    print(f"📍 Model: {shared_config.default_model_name}")
-    print(f"Temperature: {shared_config.default_temperature}")
-    print(f"🇻🇳 Vietnamese Support: {VIETNAMESE_SUPPORT}")
+    print("Starting API server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
