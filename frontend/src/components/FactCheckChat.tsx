@@ -333,7 +333,7 @@ export function FactCheckChat() {
                         {message.result && (
                           <div className="mt-3 space-y-3">
                             {/* Verdict & Confidence */}
-                            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-lg p-4 border border-slate-200/60 dark:border-slate-700/60">
+                            <div className="bg-card dark:bg-card backdrop-blur-sm rounded-lg p-4 border border-border">
                               <div className="flex items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
                                   <div
@@ -346,7 +346,7 @@ export function FactCheckChat() {
                                     {getVerdictIcon(message.result.verdict)}
                                   </div>
                                   <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    <p className="text-xs text-muted-foreground">
                                       Kết luận
                                     </p>
                                     <Badge
@@ -361,13 +361,13 @@ export function FactCheckChat() {
 
                                 {message.result.confidence !== undefined && (
                                   <div className="text-right">
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                    <p className="text-xs text-muted-foreground mb-1">
                                       Độ tin cậy
                                     </p>
                                     <div className="flex items-center gap-2">
-                                      <div className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                      <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
                                         <div
-                                          className="h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-500"
+                                          className="h-full bg-primary rounded-full transition-all duration-500"
                                           style={{
                                             width: `${
                                               message.result.confidence * 100
@@ -375,7 +375,7 @@ export function FactCheckChat() {
                                           }}
                                         />
                                       </div>
-                                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                      <span className="text-sm font-bold text-foreground">
                                         {(
                                           message.result.confidence * 100
                                         ).toFixed(0)}
@@ -388,11 +388,11 @@ export function FactCheckChat() {
                             </div>
 
                             {/* Explanation */}
-                            <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-lg p-3 border border-slate-200/60 dark:border-slate-700/60">
-                              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                            <div className="bg-muted/50 backdrop-blur-sm rounded-lg p-3 border border-border">
+                              <p className="text-xs font-medium text-muted-foreground mb-1.5">
                                 Giải thích
                               </p>
-                              <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                              <div className="text-sm text-foreground leading-relaxed">
                                 {renderMarkdown(message.result.explanation)}
                               </div>
                             </div>
@@ -401,7 +401,7 @@ export function FactCheckChat() {
                             {message.result.sources &&
                               message.result.sources.length > 0 && (
                                 <div className="space-y-2">
-                                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 px-1">
+                                  <p className="text-xs font-medium text-muted-foreground px-1">
                                     Nguồn tham khảo (
                                     {message.result.sources.length})
                                   </p>
@@ -410,16 +410,16 @@ export function FactCheckChat() {
                                       (source, idx) => (
                                         <div
                                           key={idx}
-                                          className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-md p-2.5 border border-slate-200/60 dark:border-slate-700/60 hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
+                                          className="bg-card/80 backdrop-blur-sm rounded-md p-2.5 border border-border hover:border-primary/50 transition-colors"
                                         >
                                           {typeof source === "string" ? (
                                             <a
                                               href={source}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              className="text-xs text-blue-600 dark:text-blue-400 hover:underline break-all"
+                                              className="text-xs text-primary hover:underline break-all"
                                             >
-                                              {idx + 1}. {source}
+                                              {source}
                                             </a>
                                           ) : (
                                             <div className="space-y-1.5">
@@ -427,13 +427,12 @@ export function FactCheckChat() {
                                                 href={source.url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline block"
+                                                className="text-xs font-medium text-primary hover:underline block"
                                               >
-                                                {idx + 1}.{" "}
                                                 {source.title || source.url}
                                               </a>
                                               {source.snippet && (
-                                                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 pl-4">
+                                                <p className="text-xs text-muted-foreground line-clamp-2 pl-4">
                                                   {source.snippet}
                                                 </p>
                                               )}

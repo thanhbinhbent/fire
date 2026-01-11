@@ -19,82 +19,29 @@ try:
     from common.evidence_validator import validator as evidence_validator
     from common.confidence import calibrator as confidence_calibrator
     from common.database import db as fact_check_db
+    from common.prompts import (
+        FACTUAL_LABEL,
+        NON_FACTUAL_LABEL,
+        NEI_LABEL,
+        STATEMENT_PLACEHOLDER,
+        KNOWLEDGE_PLACEHOLDER,
+        FINAL_ANSWER_OR_NEXT_SEARCH_PROMPT,
+        MUST_HAVE_FINAL_ANSWER_PROMPT,
+        format_verification_prompt
+    )
     VIETNAMESE_SUPPORT = True
 except ImportError as e:
     print(f"Vietnamese components not available: {e}")
     VIETNAMESE_SUPPORT = False
+    # Fallback labels if prompts import fails
+    FACTUAL_LABEL = 'True'
+    NON_FACTUAL_LABEL = 'False'
+    NEI_LABEL = 'Not Enough Info'
+    STATEMENT_PLACEHOLDER = '[STATEMENT]'
+    KNOWLEDGE_PLACEHOLDER = '[KNOWLEDGE]'
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 sbert_model = SentenceTransformer('all-MiniLM-L6-v2').to(device)
-_Factual_LABEL = 'True'
-_Non_Factual_LABEL = 'False'
-_NEI_LABEL = 'Not Enough Info'
-_STATEMENT_PLACEHOLDER = '[STATEMENT]'
-_KNOWLEDGE_PLACEHOLDER = '[KNOWLEDGE]'
-
-
-_FINAL_ANSWER_OR_NEXT_SEARCH_FORMAT = f"""\
-Instructions:
-1. You are provided with a STATEMENT and relevant KNOWLEDGE points.
-2. **CRITICAL: If KNOWLEDGE is empty or insufficient, you MUST issue a search query. DO NOT rely on your internal knowledge for current events, people, or facts that may have changed.**
-3. **IMPORTANT: Pay close attention to dates and time in KNOWLEDGE. For questions about "current" or "now" (hiện nay, hiện tại), ALWAYS prioritize the MOST RECENT information.**
-4. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
-5. First, provide your reasoning in Vietnamese (tiếng Việt):
-   - Think through the process step-by-step
-   - **If KNOWLEDGE contains information from different time periods, clearly identify which is most recent**
-   - Summarize key points from the KNOWLEDGE
-   - Write 2-3 clear paragraphs explaining your analysis
-   - DO NOT include any JSON, code blocks, or special formatting in your explanation
-   - Write naturally in Vietnamese like you're explaining to a person
-
-5. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
-   - If KNOWLEDGE is empty or about current events/people: {{"search_query": "Your search query"}}
-   - If you can confidently verify as true: {{"final_answer": "{_Factual_LABEL}"}}
-   - If you can confidently verify as false: {{"final_answer": "{_Non_Factual_LABEL}"}}
-   - If evidence is insufficient to determine truth: {{"final_answer": "{_NEI_LABEL}"}}
-   - If you need more information: {{"search_query": "Your search query here"}}
-
-6. Format example:
-   [Your Vietnamese explanation here - 2-3 paragraphs]
-   
-   {{"search_query": "Chủ tịch quốc hội Việt Nam hiện nay 2024"}}
-
-KNOWLEDGE:
-{_KNOWLEDGE_PLACEHOLDER}
-
-STATEMENT:
-{_STATEMENT_PLACEHOLDER}
-"""
-
-
-_MUST_HAVE_FINAL_ANSWER_FORMAT = f"""\
-Instructions:
-1. You are provided with a STATEMENT and relevant KNOWLEDGE points.
-2. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
-3. First, provide your reasoning in Vietnamese (tiếng Việt):
-   - Think step-by-step and show your reasoning
-   - Summarize key points from the KNOWLEDGE
-   - Write 2-3 clear paragraphs explaining your analysis
-   - DO NOT include any JSON, code blocks, or special formatting in your explanation
-   - Write naturally in Vietnamese like you're explaining to a person
-
-4. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
-   - True: {{"final_answer": "{_Factual_LABEL}"}}
-   - False: {{"final_answer": "{_Non_Factual_LABEL}"}}
-   - Not enough evidence: {{"final_answer": "{_NEI_LABEL}"}}
-
-5. Format example:
-   [Your Vietnamese explanation here - 2-3 paragraphs]
-   
-   {{"final_answer": "{_Factual_LABEL}"}}
-
-KNOWLEDGE:
-{_KNOWLEDGE_PLACEHOLDER}
-
-STATEMENT:
-{_STATEMENT_PLACEHOLDER}
-"""
-
 
 
 @dataclasses.dataclass()
@@ -195,10 +142,35 @@ def final_answer_or_next_search(
     tolerance: The number of similar queries or search results to tolerate before early stopping.
     """
 
-    knowledge = '\n'.join([s.result for s in past_searches])
+    # Sort searches by temporal relevance for current claims
+    if VIETNAMESE_SUPPORT and past_searches:
+        sorted_searches = []
+        for search in past_searches:
+            validation = evidence_validator.validate_evidence(
+                evidence_text=search.result,
+                source_url=search.link if hasattr(search, 'link') and search.link else search.query,
+                claim=atomic_claim
+            )
+            search.validation = validation
+            sorted_searches.append((search, validation.get('temporal_score', 0.5)))
+        
+        # Sort by temporal score (most recent first) for current claims
+        is_current_claim = any(keyword in atomic_claim.lower() for keyword in 
+                               ["hiện nay", "hiện tại", "now", "current", "bây giờ", "hôm nay"])
+        if is_current_claim:
+            past_searches = [s[0] for s in sorted(sorted_searches, key=lambda x: x[1], reverse=True)]
+    
+    # Format knowledge with date metadata
+    knowledge_parts = []
+    for i, s in enumerate(past_searches, 1):
+        knowledge_text = f"[Nguồn {i}]: {s.result}"
+        if hasattr(s, 'validation') and s.validation.get('evidence_date'):
+            knowledge_text = f"[Nguồn {i} - Ngày: {s.validation['evidence_date']}]: {s.result}"
+        knowledge_parts.append(knowledge_text)
+    
+    knowledge = '\n\n'.join(knowledge_parts)
     knowledge = 'N/A' if not knowledge else knowledge
-    full_prompt = _FINAL_ANSWER_OR_NEXT_SEARCH_FORMAT.replace(_STATEMENT_PLACEHOLDER, atomic_claim)
-    full_prompt = full_prompt.replace(_KNOWLEDGE_PLACEHOLDER, knowledge)
+    full_prompt = format_verification_prompt(atomic_claim, knowledge, require_answer=False)
     full_prompt = utils.strip_string(full_prompt)
 
     query_history = [item.query for item in past_searches]
@@ -251,11 +223,39 @@ def must_get_final_answer(
     Handles cases where the model does not return a valid answer and re.sub cannot parse the answer.
     '''
     """At the end, the LLM must make a decision."""
-    knowledge = '\n'.join([search.result for search in searches])
-    full_prompt = _MUST_HAVE_FINAL_ANSWER_FORMAT.replace(
-        _STATEMENT_PLACEHOLDER, atomic_fact
-    )
-    full_prompt = full_prompt.replace(_KNOWLEDGE_PLACEHOLDER, knowledge)
+    
+    # Sort searches by temporal relevance for current claims
+    if VIETNAMESE_SUPPORT and searches:
+        sorted_searches = []
+        for search in searches:
+            validation = evidence_validator.validate_evidence(
+                evidence_text=search.result,
+                source_url=search.link if hasattr(search, 'link') and search.link else search.query,
+                claim=atomic_fact
+            )
+            sorted_searches.append((search, validation.get('temporal_score', 0.5), validation))
+        
+        # Sort by temporal score (most recent first) for current claims
+        is_current_claim = any(keyword in atomic_fact.lower() for keyword in 
+                               ["hiện nay", "hiện tại", "now", "current", "bây giờ", "hôm nay"])
+        if is_current_claim:
+            sorted_searches = sorted(sorted_searches, key=lambda x: x[1], reverse=True)
+            searches = [s[0] for s in sorted_searches]
+            
+            # Add date metadata
+            knowledge_parts = []
+            for i, (search, _, validation) in enumerate(sorted_searches, 1):
+                knowledge_text = f"[Nguồn {i}]: {search.result}"
+                if validation.get('evidence_date'):
+                    knowledge_text = f"[Nguồn {i} - Ngày: {validation['evidence_date']}]: {search.result}"
+                knowledge_parts.append(knowledge_text)
+            knowledge = '\n\n'.join(knowledge_parts)
+        else:
+            knowledge = '\n'.join([search.result for search in searches])
+    else:
+        knowledge = '\n'.join([search.result for search in searches])
+    
+    full_prompt = format_verification_prompt(atomic_fact, knowledge, require_answer=True)
     full_prompt = utils.strip_string(full_prompt)
 
     try:
@@ -271,7 +271,7 @@ def must_get_final_answer(
         if 'final_answer' in answer:
             final_answer = answer['final_answer']
 
-        if final_answer in [_Factual_LABEL, _Non_Factual_LABEL, _NEI_LABEL]:
+        if final_answer in [FACTUAL_LABEL, NON_FACTUAL_LABEL, NEI_LABEL]:
             return FinalAnswer(response=model_response, answer=final_answer), usage
         else:
             return None, None
@@ -341,7 +341,9 @@ def verify_atomic_claim(
         elif isinstance(answer_or_next_search, FinalAnswer):
             if len(search_results) < min_searches:
                 print(f"LLM tried to answer without search. Forcing search... (Step {step+1}/{max_steps})")
-                default_query = f"{atomic_claim} hiện nay 2024"
+                from datetime import datetime
+                current_year = datetime.now().year
+                default_query = f"{atomic_claim} hiện nay {current_year}"
                 print(f"Auto-generated query: {default_query}")
                 search_result_text = call_search(default_query, atomic_claim=atomic_claim)
                 link = call_search(default_query, atomic_claim=atomic_claim, with_links=True)

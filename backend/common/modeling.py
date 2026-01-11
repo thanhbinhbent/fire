@@ -2,11 +2,10 @@ import os
 import litellm
 from typing import Optional, Dict, Tuple, Any
 from common import utils
+from common.prompts import FACT_CHECK_SYSTEM_PROMPT
 
 litellm.suppress_debug_info = True
 litellm.drop_params = True
-
-SYS_PROMPT = 'You are a fact-checking agent responsible for verifying the accuracy of claims.'
 
 
 class Model:
@@ -106,7 +105,7 @@ class Model:
         
         try:
             messages = [
-                {"role": "system", "content": system_prompt or SYS_PROMPT},
+                {"role": "system", "content": system_prompt or FACT_CHECK_SYSTEM_PROMPT},
                 {"role": "user", "content": context}
             ]
             
