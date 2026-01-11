@@ -143,26 +143,6 @@ class SerperAPI:
 
     return snippets
 
-  def _parse_results_with_links(self, results: dict[Any, Any]) -> List[Dict[str, str]]:
-    """Parse results with links."""
-    parsed_results = []
-    
-    result_key = self.result_key_for_type[self.search_type]
-    
-    if result_key in results:
-      for result in results[result_key][:self.k]:
-        snippet = result.get('snippet', '')
-        link = result.get('link', '')
-        title = result.get('title', '')
-        if snippet:
-          parsed_results.append({
-            'snippet': snippet,
-            'link': link,
-            'title': title
-          })
-    
-    return parsed_results
-
   def _parse_results(self, results: dict[Any, Any]) -> str:
     return ' '.join(self._parse_snippets(results))
 
@@ -257,16 +237,4 @@ class VietnameseSerperAPI:
             )
         
         return self.base_api.run(query, k=k or self.k)
-    
-    def get_results_with_links(self, query: str, claim: Optional[str] = None, k: Optional[int] = None) -> List[Dict[str, str]]:
-        """Get search results with links."""
-        if self.prefer_vietnamese:
-            query = enhance_vietnamese_query(
-                query,
-                claim=claim,
-                prefer_vietnamese=True
-            )
-        
-        raw_results = self.base_api._google_serper_api_results(query, search_type='search', num=k or self.k)
-        return self.base_api._parse_results_with_links(raw_results)
 

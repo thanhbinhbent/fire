@@ -141,25 +141,30 @@ def call_search(
     if search_type == 'serper':
         if VIETNAMESE_SUPPORT and hasattr(query_serper, 'VietnameseSerperAPI'):
             serper_searcher = query_serper.VietnameseSerperAPI(serper_api_key, k=num_searches)
-            
-            if with_links:
-                return serper_searcher.get_results_with_links(search_query, claim=atomic_claim, k=num_searches)
-            else:
-                result = serper_searcher.run(search_query, claim=atomic_claim, k=num_searches)
-                if atomic_claim:
-                    fact_check_db.cache_search(search_query, result)
-                return result
+            base_searcher = serper_searcher.base_api
         else:
-            serper_searcher = query_serper.SerperAPI(serper_api_key, k=num_searches)
+            base_searcher = query_serper.SerperAPI(serper_api_key, k=num_searches)
+        
+        if with_links:
+            # Get raw results and extract link from first result
+            raw_results = base_searcher._google_serper_api_results(search_query, search_type='search', num=num_searches)
+            result_key = base_searcher.result_key_for_type['search']
             
-            if with_links:
-                raw_results = serper_searcher._google_serper_api_results(search_query, search_type='search', num=num_searches)
-                return serper_searcher._parse_results_with_links(raw_results)
+            link = ''
+            if result_key in raw_results and len(raw_results[result_key]) > 0:
+                link = raw_results[result_key][0].get('link', '')
+            
+            return link
+        else:
+            if VIETNAMESE_SUPPORT and hasattr(query_serper, 'VietnameseSerperAPI'):
+                result = serper_searcher.run(search_query, claim=atomic_claim, k=num_searches)
             else:
-                result = serper_searcher.run(search_query, k=num_searches)
-                if VIETNAMESE_SUPPORT and atomic_claim:
-                    fact_check_db.cache_search(search_query, result)
-                return result
+                result = base_searcher.run(search_query, k=num_searches)
+            
+            if VIETNAMESE_SUPPORT and atomic_claim:
+                fact_check_db.cache_search(search_query, result)
+            
+            return result
     else:
         raise ValueError(f'Unsupported search type: {search_type}')
 
@@ -228,12 +233,7 @@ def final_answer_or_next_search(
             return '_Early_Stop', usage
 
         search_result = call_search(answer_or_next_query['search_query'], atomic_claim=atomic_claim)
-        search_results_with_links = call_search(answer_or_next_query['search_query'], atomic_claim=atomic_claim, with_links=True)
-        
-        # Extract link from first result if available
-        link = ''
-        if isinstance(search_results_with_links, list) and len(search_results_with_links) > 0:
-            link = search_results_with_links[0].get('link', '')
+        link = call_search(answer_or_next_query['search_query'], atomic_claim=atomic_claim, with_links=True)
         
         return GoogleSearchResult(query=answer_or_next_query['search_query'], result=search_result, link=link), usage
     else:
@@ -342,11 +342,7 @@ def verify_atomic_claim(
                 default_query = f"{atomic_claim} hiện nay 2024"
                 print(f"Auto-generated query: {default_query}")
                 search_result_text = call_search(default_query, atomic_claim=atomic_claim)
-                search_results_with_links = call_search(default_query, atomic_claim=atomic_claim, with_links=True)
-                
-                link = ''
-                if isinstance(search_results_with_links, list) and len(search_results_with_links) > 0:
-                    link = search_results_with_links[0].get('link', '')
+                link = call_search(default_query, atomic_claim=atomic_claim, with_links=True)
                 
                 search_results.append(GoogleSearchResult(query=default_query, result=search_result_text, link=link))
                 continue
