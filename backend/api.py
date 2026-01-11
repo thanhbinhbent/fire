@@ -152,13 +152,16 @@ async def check_fact(request: FactCheckRequest):
                 verdict = final_answer.answer  # "Supported", "Refuted", "Not Enough Info"
                 raw_response = final_answer.response  # Full response text
                 
-                # Map to Vietnamese labels
+                # Map to Vietnamese labels (LLM returns True/False, not Supported/Refuted)
                 verdict_map = {
+                    "True": "Đúng",
+                    "False": "Sai",
+                    "NOT ENOUGH INFO": "Chưa đủ thông tin",
+                    # Fallbacks for other formats
                     "Supported": "Đúng",
-                    "Refuted": "Sai", 
-                    "Not Enough Info": "Chưa đủ thông tin"
+                    "Refuted": "Sai"
                 }
-                verdict_vn = verdict_map.get(verdict, verdict)
+                verdict_vn = verdict_map.get(verdict, "Chưa rõ")
                 
                 # Extract explanation (remove JSON line at the end since prompt separates them)
                 explanation = raw_response
@@ -181,9 +184,21 @@ async def check_fact(request: FactCheckRequest):
                     )
                     
                     result_text = search.get('result', '')
+                    
+                    # Extract URL from result text if available
+                    # Search results from Serper include URLs in the text
+                    # Format: "Title. URL: https://... Description..."
+                    import re
+                    url_match = re.search(r'https?://[^\s]+', result_text)
+                    source_url = url_match.group(0) if url_match else f"https://google.com/search?q={search.get('query', '')}"
+                    
+                    # Extract title (first sentence before URL or description)
+                    title_match = result_text.split('.')[0] if '.' in result_text else search.get('query', '')
+                    title = title_match[:100] if len(title_match) > 100 else title_match
+                    
                     sources.append({
-                        "url": f"Search query: {search.get('query', '')}",
-                        "title": f"Search result #{idx+1}",
+                        "url": source_url,
+                        "title": title or f"Search result #{idx+1}",
                         "snippet": result_text[:200] + "..." if len(result_text) > 200 else result_text,
                         "credibility": validation.get('credibility_score', 0.5),
                         "relevance": validation.get('relevance_score', 0.5),

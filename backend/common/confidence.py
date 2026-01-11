@@ -46,10 +46,14 @@ class ConfidenceCalibrator:
             float: Confidence score between 0 and 1
         """
         # Base confidence from verdict certainty
+        # LLM returns "True"/"False", not "Supported"/"Refuted"
         base_scores = {
+            "TRUE": 0.75,
+            "FALSE": 0.75,
+            "NOT ENOUGH INFO": 0.4,
+            # Fallbacks for other formats
             "SUPPORTS": 0.75,
             "REFUTES": 0.75,
-            "NOT ENOUGH INFO": 0.4,
             "SUPPORTED": 0.75,
             "REFUTED": 0.75,
         }
@@ -103,17 +107,22 @@ class ConfidenceCalibrator:
 
     def get_verdict_label(self, verdict: str, confidence: float) -> str:
         """
-        Convert FIRE verdict to Vietnamese label with confidence qualifier.
+        Convert verdict to Vietnamese label with confidence qualifier.
+        Maps both FIRE format (SUPPORTS/REFUTES) and LLM format (True/False).
 
         Args:
-            verdict: FIRE verdict (SUPPORTS, REFUTES, NOT ENOUGH INFO)
+            verdict: Verdict string (SUPPORTS/REFUTES/NOT ENOUGH INFO or True/False)
             confidence: Confidence score
 
         Returns:
             str: Vietnamese verdict with confidence qualifier
         """
-        # Base labels
+        # Base labels - support both formats
         labels = {
+            # LLM format (primary)
+            "TRUE": "Đúng",
+            "FALSE": "Sai",
+            # FIRE format (fallback)
             "SUPPORTS": "Đúng",
             "REFUTES": "Sai",
             "NOT ENOUGH INFO": "Chưa rõ",

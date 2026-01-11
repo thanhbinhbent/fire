@@ -36,22 +36,24 @@ _KNOWLEDGE_PLACEHOLDER = '[KNOWLEDGE]'
 _FINAL_ANSWER_OR_NEXT_SEARCH_FORMAT = f"""\
 Instructions:
 1. You are provided with a STATEMENT and relevant KNOWLEDGE points.
-2. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
-3. First, provide your reasoning in Vietnamese (tiếng Việt):
+2. **CRITICAL: If KNOWLEDGE is empty or insufficient, you MUST issue a search query. DO NOT rely on your internal knowledge for current events, people, or facts that may have changed.**
+3. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
+4. First, provide your reasoning in Vietnamese (tiếng Việt):
    - Think through the process step-by-step
    - Summarize key points from the KNOWLEDGE
    - Write 2-3 clear paragraphs explaining your analysis
    - DO NOT include any JSON, code blocks, or special formatting in your explanation
    - Write naturally in Vietnamese like you're explaining to a person
 
-4. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
-   - If you can make a confident decision: {{"final_answer": "{_Factual_LABEL}"}} or {{"final_answer": "{_Non_Factual_LABEL}"}}
+5. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
+   - If KNOWLEDGE is empty or about current events/people: {{"search_query": "Your search query"}}
+   - If you can make a confident decision based on KNOWLEDGE: {{"final_answer": "{_Factual_LABEL}"}} or {{"final_answer": "{_Non_Factual_LABEL}"}}
    - If you need more information: {{"search_query": "Your search query here"}}
 
-5. Format example:
+6. Format example:
    [Your Vietnamese explanation here - 2-3 paragraphs]
    
-   {{"final_answer": "{_Factual_LABEL}"}}
+   {{"search_query": "Chủ tịch quốc hội Việt Nam hiện nay 2024"}}
 
 KNOWLEDGE:
 {_KNOWLEDGE_PLACEHOLDER}
@@ -304,7 +306,9 @@ def verify_atomic_claim(
     }
 
     stop_search = False
-    for _ in range(max_steps):
+    min_searches = 1  # Force at least 1 search to avoid outdated LLM knowledge
+    
+    for step in range(max_steps):
         answer_or_next_search, num_tries = None, 0
         while not answer_or_next_search and num_tries <= max_retries:
             answer_or_next_search, usage = final_answer_or_next_search(atomic_claim, search_results, rater,
@@ -324,6 +328,16 @@ def verify_atomic_claim(
         elif isinstance(answer_or_next_search, GoogleSearchResult):
             search_results.append(answer_or_next_search)
         elif isinstance(answer_or_next_search, FinalAnswer):
+            # Force at least min_searches before accepting final answer
+            if len(search_results) < min_searches:
+                print(f"⚠️ LLM tried to answer without search. Forcing search... (Step {step+1}/{max_steps})")
+                # Generate default search query from claim
+                default_query = f"{atomic_claim} hiện nay 2024"
+                print(f"🔍 Auto-generated query: {default_query}")
+                search_result_text = call_search(default_query, atomic_claim=atomic_claim)
+                search_results.append(GoogleSearchResult(query=default_query, result=search_result_text))
+                continue
+            
             # Vietnamese Enhancement: Validate evidence and calculate confidence
             if VIETNAMESE_SUPPORT:
                 try:

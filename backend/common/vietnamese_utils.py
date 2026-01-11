@@ -3,7 +3,7 @@
 
 import re
 import unicodedata
-from typing import List, Dict
+from typing import List, Dict, Optional
 from underthesea import sent_tokenize, word_tokenize, ner
 
 
