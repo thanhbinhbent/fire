@@ -143,12 +143,14 @@ async def check_fact(request: FactCheckRequest):
                 tolerance=2
             )
             
-            print(f"📊 Verification complete. Searches: {len(search_results)}")
+            # Extract google_searches list from the returned dict
+            google_searches = search_results.get('google_searches', [])
+            print(f"📊 Verification complete. Searches: {len(google_searches)}")
             
             if final_answer:
                 # Extract verdict and explanation
                 verdict = final_answer.answer  # "Supported", "Refuted", "Not Enough Info"
-                explanation = final_answer.reason
+                raw_response = final_answer.response  # Full response text
                 
                 # Map to Vietnamese labels
                 verdict_map = {
@@ -158,20 +160,31 @@ async def check_fact(request: FactCheckRequest):
                 }
                 verdict_vn = verdict_map.get(verdict, verdict)
                 
+                # Extract explanation (remove JSON line at the end since prompt separates them)
+                explanation = raw_response
+                
+                # Remove only the final JSON line (prompt instructs to put it on separate line)
+                import re
+                lines = explanation.split('\n')
+                # Remove lines that are pure JSON objects
+                cleaned_lines = [line for line in lines if not re.match(r'^\s*\{[^}]*"(final_answer|search_query)"[^}]*\}\s*$', line)]
+                explanation = '\n'.join(cleaned_lines).strip()
+                
                 # Build sources from search results
                 sources = []
-                for idx, search in enumerate(search_results):
-                    # Validate evidence quality
+                for idx, search in enumerate(google_searches):
+                    # Validate evidence quality (search is a dict now)
                     validation = validator.validate_evidence(
-                        evidence_text=search.result,
-                        source_url=search.query,
+                        evidence_text=search.get('result', ''),
+                        source_url=search.get('query', ''),
                         claim=request.claim
                     )
                     
+                    result_text = search.get('result', '')
                     sources.append({
-                        "url": f"Search query: {search.query}",
+                        "url": f"Search query: {search.get('query', '')}",
                         "title": f"Search result #{idx+1}",
-                        "snippet": search.result[:200] + "..." if len(search.result) > 200 else search.result,
+                        "snippet": result_text[:200] + "..." if len(result_text) > 200 else result_text,
                         "credibility": validation.get('credibility_score', 0.5),
                         "relevance": validation.get('relevance_score', 0.5),
                     })

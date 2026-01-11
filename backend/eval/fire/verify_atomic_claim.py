@@ -37,21 +37,21 @@ _FINAL_ANSWER_OR_NEXT_SEARCH_FORMAT = f"""\
 Instructions:
 1. You are provided with a STATEMENT and relevant KNOWLEDGE points.
 2. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
-3. Before presenting your conclusion, think through the process step-by-step. 
-   Include a summary of the key points from the KNOWLEDGE as part of your reasoning.
-4. If the KNOWLEDGE allows you to confidently make a decision, output the final 
-   answer as a JSON object in the following format:
-   {{
-     "final_answer": "{_Factual_LABEL}" or "{_Non_Factual_LABEL}"
-   }}
-5. If the KNOWLEDGE is insufficient to make a judgment, issue ONE Google Search 
-   query that could provide additional evidence. Output the search query in JSON 
-   format, as follows:
-   {{
-     "search_query": "Your Google search query here"
-   }}
-6. The query should aim to obtain new information not already present in the 
-   KNOWLEDGE, specifically helpful for verifying the STATEMENT's accuracy.
+3. First, provide your reasoning in Vietnamese (tiếng Việt):
+   - Think through the process step-by-step
+   - Summarize key points from the KNOWLEDGE
+   - Write 2-3 clear paragraphs explaining your analysis
+   - DO NOT include any JSON, code blocks, or special formatting in your explanation
+   - Write naturally in Vietnamese like you're explaining to a person
+
+4. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
+   - If you can make a confident decision: {{"final_answer": "{_Factual_LABEL}"}} or {{"final_answer": "{_Non_Factual_LABEL}"}}
+   - If you need more information: {{"search_query": "Your search query here"}}
+
+5. Format example:
+   [Your Vietnamese explanation here - 2-3 paragraphs]
+   
+   {{"final_answer": "{_Factual_LABEL}"}}
 
 KNOWLEDGE:
 {_KNOWLEDGE_PLACEHOLDER}
@@ -65,13 +65,20 @@ _MUST_HAVE_FINAL_ANSWER_FORMAT = f"""\
 Instructions:
 1. You are provided with a STATEMENT and relevant KNOWLEDGE points.
 2. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
-3. Before presenting your final answer, think step-by-step and show your reasoning. 
-   Include a summary of the key points from the KNOWLEDGE as part of your reasoning.
-4. Your final answer should be either "{_Factual_LABEL}" or "{_Non_Factual_LABEL}".
-5. Format your final answer as a JSON object in the following structure:
-   {{
-     "final_answer": "{_Factual_LABEL}" or "{_Non_Factual_LABEL}"
-   }}
+3. First, provide your reasoning in Vietnamese (tiếng Việt):
+   - Think step-by-step and show your reasoning
+   - Summarize key points from the KNOWLEDGE
+   - Write 2-3 clear paragraphs explaining your analysis
+   - DO NOT include any JSON, code blocks, or special formatting in your explanation
+   - Write naturally in Vietnamese like you're explaining to a person
+
+4. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
+   {{"final_answer": "{_Factual_LABEL}"}} or {{"final_answer": "{_Non_Factual_LABEL}"}}
+
+5. Format example:
+   [Your Vietnamese explanation here - 2-3 paragraphs]
+   
+   {{"final_answer": "{_Factual_LABEL}"}}
 
 KNOWLEDGE:
 {_KNOWLEDGE_PLACEHOLDER}
@@ -279,10 +286,16 @@ def verify_atomic_claim(
     preprocessed_claim = atomic_claim
     if VIETNAMESE_SUPPORT:
         try:
-            preprocessed_claim = preprocessor.preprocess_claim(atomic_claim)
+            processed_result = preprocessor.preprocess_claim(atomic_claim)
+            # Handle both dict and string returns
+            if isinstance(processed_result, dict):
+                preprocessed_claim = processed_result.get('normalized', atomic_claim)
+            else:
+                preprocessed_claim = str(processed_result)
             print(f"📝 Preprocessed claim: {preprocessed_claim[:100]}...")
         except Exception as e:
-            print(f"Preprocessing failed, using original claim: {e}")
+            print(f"⚠️ Preprocessing failed, using original claim: {e}")
+            preprocessed_claim = atomic_claim
     
     search_results = []
     total_usage = {
@@ -317,28 +330,32 @@ def verify_atomic_claim(
                     # Calculate evidence quality score
                     evidence_scores = []
                     for search in search_results:
+                        # Ensure preprocessed_claim is string
+                        claim_text = preprocessed_claim if isinstance(preprocessed_claim, str) else str(preprocessed_claim)
+                        
                         validation = evidence_validator.validate_evidence(
                             evidence_text=search.result,
                             source_url=search.query,  # Use query as proxy for source
-                            claim=preprocessed_claim
+                            claim=claim_text
                         )
                         evidence_scores.append(validation['overall_score'])
                     
                     avg_evidence_quality = sum(evidence_scores) / len(evidence_scores) if evidence_scores else 0.5
                     
-                    # Calculate confidence
+                    # Calculate confidence - ensure claim_length is from string
+                    claim_text = preprocessed_claim if isinstance(preprocessed_claim, str) else str(preprocessed_claim)
                     confidence = confidence_calibrator.calculate_confidence(
                         verdict=answer_or_next_search.answer,
                         iterations=len(search_results),
                         max_iterations=max_steps,
-                        claim_length=len(preprocessed_claim.split()),
+                        claim_length=len(claim_text.split()),
                         evidence_count=len(search_results),
                         evidence_quality=avg_evidence_quality
                     )
                     
                     is_confident = confidence_calibrator.is_confident(
                         confidence,
-                        claim_complexity=len(preprocessed_claim.split())
+                        claim_complexity=len(claim_text.split())
                     )
                     
                     # Get Vietnamese verdict label
@@ -361,7 +378,9 @@ def verify_atomic_claim(
                     print(f"🏷️ Verdict: {verdict_label}")
                     
                 except Exception as e:
-                    print(f"Vietnamese enhancements failed: {e}")
+                    import traceback
+                    print(f"⚠️ Vietnamese enhancements failed: {e}")
+                    traceback.print_exc()
             
             search_dicts = {
                 'google_searches': [dataclasses.asdict(s) for s in search_results]

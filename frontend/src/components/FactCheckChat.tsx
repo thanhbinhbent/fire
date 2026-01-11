@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type JSX } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +17,62 @@ import {
 } from "lucide-react";
 import type { Message, FactCheckResult } from "./types";
 import { ConversationSidebar } from "./ConversationSidebar";
+
+// Helper to render markdown-like formatting
+const renderMarkdown = (text: string) => {
+  if (!text) return null;
+
+  // Split by newlines to preserve paragraphs
+  const paragraphs = text.split("\n").filter((p) => p.trim());
+
+  return paragraphs.map((paragraph, idx) => {
+    // Process inline markdown
+    const parts: (string | JSX.Element)[] = [];
+    let lastIndex = 0;
+
+    // Match **bold** and *italic*
+    const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+    let match;
+
+    while ((match = regex.exec(paragraph)) !== null) {
+      // Add text before match
+      if (match.index > lastIndex) {
+        parts.push(paragraph.slice(lastIndex, match.index));
+      }
+
+      // Add formatted text
+      if (match[1]) {
+        // Bold
+        parts.push(
+          <strong key={`${idx}-${match.index}`} className="font-semibold">
+            {match[1]}
+          </strong>
+        );
+      } else if (match[2]) {
+        // Italic
+        parts.push(
+          <em key={`${idx}-${match.index}`} className="italic">
+            {match[2]}
+          </em>
+        );
+      }
+
+      lastIndex = regex.lastIndex;
+    }
+
+    // Add remaining text
+    if (lastIndex < paragraph.length) {
+      parts.push(paragraph.slice(lastIndex));
+    }
+
+    return (
+      <p key={idx} className="mb-2 last:mb-0">
+        {parts.length > 0 ? parts : paragraph}
+      </p>
+    );
+  });
+};
+
 import {
   type Conversation,
   loadConversations,
@@ -165,28 +221,40 @@ export function FactCheckChat() {
   };
 
   const getVerdictColor = (verdict: string) => {
-    switch (verdict) {
-      case "Đúng":
-        return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-400";
-      case "Sai":
-        return "bg-rose-500/10 text-rose-600 border-rose-500/20 dark:bg-rose-500/20 dark:text-rose-400";
-      case "Chưa rõ":
-        return "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:bg-amber-500/20 dark:text-amber-400";
-      default:
-        return "bg-slate-500/10 text-slate-600 border-slate-500/20";
+    const verdictLower = verdict.toLowerCase();
+    if (verdictLower.includes("đúng") || verdictLower.includes("supported")) {
+      return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-400";
+    } else if (
+      verdictLower.includes("sai") ||
+      verdictLower.includes("refuted")
+    ) {
+      return "bg-rose-500/10 text-rose-600 border-rose-500/20 dark:bg-rose-500/20 dark:text-rose-400";
+    } else if (
+      verdictLower.includes("chưa") ||
+      verdictLower.includes("not enough")
+    ) {
+      return "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:bg-amber-500/20 dark:text-amber-400";
+    } else {
+      return "bg-slate-500/10 text-slate-600 border-slate-500/20";
     }
   };
 
   const getVerdictIcon = (verdict: string) => {
-    switch (verdict) {
-      case "Đúng":
-        return <CheckCircle2 className="h-5 w-5" />;
-      case "Sai":
-        return <XCircle className="h-5 w-5" />;
-      case "Chưa rõ":
-        return <AlertCircle className="h-5 w-5" />;
-      default:
-        return null;
+    const verdictLower = verdict.toLowerCase();
+    if (verdictLower.includes("đúng") || verdictLower.includes("supported")) {
+      return <CheckCircle2 className="h-5 w-5" />;
+    } else if (
+      verdictLower.includes("sai") ||
+      verdictLower.includes("refuted")
+    ) {
+      return <XCircle className="h-5 w-5" />;
+    } else if (
+      verdictLower.includes("chưa") ||
+      verdictLower.includes("not enough")
+    ) {
+      return <AlertCircle className="h-5 w-5" />;
+    } else {
+      return <AlertCircle className="h-5 w-5" />;
     }
   };
 
@@ -262,40 +330,43 @@ export function FactCheckChat() {
                         </p>
 
                         {message.result && (
-                          <div className="mt-4 space-y-5 animate-in fade-in slide-in-from-bottom-3 duration-500">
-                            {/* Verdict Card */}
-                            <div className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 rounded-xl p-5 shadow-lg border border-slate-200/50 dark:border-slate-700/50">
-                              <div className="flex items-start justify-between gap-4 mb-4">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-                                      {getVerdictIcon(message.result.verdict)}
-                                    </div>
-                                    <div>
-                                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                                        Kết luận
-                                      </p>
-                                      <Badge
-                                        className={`${getVerdictColor(
-                                          message.result.verdict
-                                        )} mt-1 px-3 py-1 text-sm font-bold shadow-sm`}
-                                      >
-                                        {message.result.verdict}
-                                      </Badge>
-                                    </div>
+                          <div className="mt-3 space-y-3">
+                            {/* Verdict & Confidence */}
+                            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-lg p-4 border border-slate-200/60 dark:border-slate-700/60">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`p-2 rounded-lg ${
+                                      getVerdictColor(
+                                        message.result.verdict
+                                      ).split(" ")[0]
+                                    }`}
+                                  >
+                                    {getVerdictIcon(message.result.verdict)}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                      Kết luận
+                                    </p>
+                                    <Badge
+                                      className={`${getVerdictColor(
+                                        message.result.verdict
+                                      )} mt-0.5 font-semibold`}
+                                    >
+                                      {message.result.verdict}
+                                    </Badge>
                                   </div>
                                 </div>
 
-                                {/* Confidence Score */}
                                 {message.result.confidence !== undefined && (
                                   <div className="text-right">
-                                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                                       Độ tin cậy
                                     </p>
-                                    <div className="flex items-center gap-3">
-                                      <div className="relative w-32 h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden shadow-inner">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                                         <div
-                                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 via-blue-500 to-indigo-600 rounded-full transition-all duration-700 ease-out shadow-md"
+                                          className="h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-500"
                                           style={{
                                             width: `${
                                               message.result.confidence * 100
@@ -303,7 +374,7 @@ export function FactCheckChat() {
                                           }}
                                         />
                                       </div>
-                                      <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
                                         {(
                                           message.result.confidence * 100
                                         ).toFixed(0)}
@@ -315,156 +386,85 @@ export function FactCheckChat() {
                               </div>
                             </div>
 
-                            {/* Explanation Card */}
-                            <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-md border border-slate-200/50 dark:border-slate-700/50">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="p-1.5 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                                  <svg
-                                    className="w-4 h-4 text-amber-600 dark:text-amber-400"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                  </svg>
-                                </div>
-                                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                                  Giải thích chi tiết
-                                </h4>
-                              </div>
-                              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed pl-8">
-                                {message.result.explanation}
+                            {/* Explanation */}
+                            <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-lg p-3 border border-slate-200/60 dark:border-slate-700/60">
+                              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                                Giải thích
                               </p>
+                              <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                                {renderMarkdown(message.result.explanation)}
+                              </div>
                             </div>
 
-                            {/* Sources Cards */}
+                            {/* Sources */}
                             {message.result.sources &&
                               message.result.sources.length > 0 && (
-                                <div className="space-y-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                                      <svg
-                                        className="w-4 h-4 text-blue-600 dark:text-blue-400"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-                                        />
-                                      </svg>
-                                    </div>
-                                    <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                                      Nguồn tham khảo (
-                                      {message.result.sources.length})
-                                    </h4>
-                                  </div>
-                                  <div className="grid gap-3">
+                                <div className="space-y-2">
+                                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 px-1">
+                                    Nguồn tham khảo (
+                                    {message.result.sources.length})
+                                  </p>
+                                  <div className="space-y-1.5">
                                     {message.result.sources.map(
                                       (source, idx) => (
                                         <div
                                           key={idx}
-                                          className="group bg-white dark:bg-slate-800 rounded-lg p-4 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-200"
+                                          className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-md p-2.5 border border-slate-200/60 dark:border-slate-700/60 hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
                                         >
-                                          <div className="flex items-start gap-3">
-                                            <div className="flex-shrink-0 w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                                              {idx + 1}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                              {typeof source === "string" ? (
-                                                <a
-                                                  href={source}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline break-all font-medium"
-                                                >
-                                                  {source}
-                                                </a>
-                                              ) : (
-                                                <div className="space-y-2">
-                                                  <a
-                                                    href={source.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline block group-hover:translate-x-1 transition-transform duration-200"
-                                                  >
-                                                    {source.title || source.url}
-                                                  </a>
-                                                  {source.snippet && (
-                                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-2 pl-3 border-l-2 border-slate-200 dark:border-slate-700">
-                                                      {source.snippet}
-                                                    </p>
+                                          {typeof source === "string" ? (
+                                            <a
+                                              href={source}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-xs text-blue-600 dark:text-blue-400 hover:underline break-all"
+                                            >
+                                              {idx + 1}. {source}
+                                            </a>
+                                          ) : (
+                                            <div className="space-y-1.5">
+                                              <a
+                                                href={source.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline block"
+                                              >
+                                                {idx + 1}.{" "}
+                                                {source.title || source.url}
+                                              </a>
+                                              {source.snippet && (
+                                                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 pl-4">
+                                                  {source.snippet}
+                                                </p>
+                                              )}
+                                              {(source.credibility !==
+                                                undefined ||
+                                                source.relevance !==
+                                                  undefined) && (
+                                                <div className="flex gap-3 text-xs pl-4">
+                                                  {source.credibility !==
+                                                    undefined && (
+                                                    <span className="text-emerald-600 dark:text-emerald-400">
+                                                      ✓{" "}
+                                                      {(
+                                                        source.credibility * 100
+                                                      ).toFixed(0)}
+                                                      % tin cậy
+                                                    </span>
                                                   )}
-                                                  {(source.credibility !==
-                                                    undefined ||
-                                                    source.relevance !==
-                                                      undefined) && (
-                                                    <div className="flex gap-4 pt-2">
-                                                      {source.credibility !==
-                                                        undefined && (
-                                                        <div className="flex items-center gap-2">
-                                                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-md">
-                                                            <svg
-                                                              className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
-                                                              fill="currentColor"
-                                                              viewBox="0 0 20 20"
-                                                            >
-                                                              <path
-                                                                fillRule="evenodd"
-                                                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                                                clipRule="evenodd"
-                                                              />
-                                                            </svg>
-                                                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                                                              {(
-                                                                source.credibility *
-                                                                100
-                                                              ).toFixed(0)}
-                                                              % tin cậy
-                                                            </span>
-                                                          </div>
-                                                        </div>
-                                                      )}
-                                                      {source.relevance !==
-                                                        undefined && (
-                                                        <div className="flex items-center gap-2">
-                                                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-md">
-                                                            <svg
-                                                              className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400"
-                                                              fill="currentColor"
-                                                              viewBox="0 0 20 20"
-                                                            >
-                                                              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                                                              <path
-                                                                fillRule="evenodd"
-                                                                d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                                                clipRule="evenodd"
-                                                              />
-                                                            </svg>
-                                                            <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                                                              {(
-                                                                source.relevance *
-                                                                100
-                                                              ).toFixed(0)}
-                                                              % liên quan
-                                                            </span>
-                                                          </div>
-                                                        </div>
-                                                      )}
-                                                    </div>
+                                                  {source.relevance !==
+                                                    undefined && (
+                                                    <span className="text-blue-600 dark:text-blue-400">
+                                                      ⊕{" "}
+                                                      {(
+                                                        source.relevance * 100
+                                                      ).toFixed(0)}
+                                                      % liên quan
+                                                    </span>
                                                   )}
                                                 </div>
                                               )}
                                             </div>
-                                          </div>
+                                          )}
                                         </div>
                                       )
                                     )}
