@@ -282,10 +282,11 @@ export function FactCheckChat() {
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="text-lg md:text-xl font-semibold text-foreground truncate">
-                  Hệ thống Kiểm tra Thông tin
+                  {currentConversation.title}
                 </h1>
                 <p className="text-xs md:text-sm text-muted-foreground truncate">
-                  Xác minh tính chính xác của thông tin với AI
+                  {currentConversation.messages.filter((m) => m.result).length}{" "}
+                  kết quả đã kiểm tra
                 </p>
               </div>
             </div>

@@ -37,9 +37,11 @@ _FINAL_ANSWER_OR_NEXT_SEARCH_FORMAT = f"""\
 Instructions:
 1. You are provided with a STATEMENT and relevant KNOWLEDGE points.
 2. **CRITICAL: If KNOWLEDGE is empty or insufficient, you MUST issue a search query. DO NOT rely on your internal knowledge for current events, people, or facts that may have changed.**
-3. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
-4. First, provide your reasoning in Vietnamese (tiếng Việt):
+3. **IMPORTANT: Pay close attention to dates and time in KNOWLEDGE. For questions about "current" or "now" (hiện nay, hiện tại), ALWAYS prioritize the MOST RECENT information.**
+4. Based on the KNOWLEDGE, assess the factual accuracy of the STATEMENT.
+5. First, provide your reasoning in Vietnamese (tiếng Việt):
    - Think through the process step-by-step
+   - **If KNOWLEDGE contains information from different time periods, clearly identify which is most recent**
    - Summarize key points from the KNOWLEDGE
    - Write 2-3 clear paragraphs explaining your analysis
    - DO NOT include any JSON, code blocks, or special formatting in your explanation
@@ -171,8 +173,8 @@ def call_search(
 def get_sentence_similarity(new_sent, sentences, threshold=0.9):
     if len(sentences) == 0:
         return 0
-    single_embedding  = sbert_model.encode(new_sent, convert_to_tensor=True).to(torch.device('cuda'))
-    list_embeddings = sbert_model.encode(sentences, convert_to_tensor=True).to(torch.device('cuda'))
+    single_embedding  = sbert_model.encode(new_sent, convert_to_tensor=True).to(device)
+    list_embeddings = sbert_model.encode(sentences, convert_to_tensor=True).to(device)
     similarities = util.cos_sim(single_embedding, list_embeddings)
 
     count_above_threshold = sum(1 for i in range(len(sentences)) if similarities[0][i].item() > threshold)

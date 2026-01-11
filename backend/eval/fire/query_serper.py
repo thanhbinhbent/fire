@@ -159,6 +159,7 @@ def enhance_vietnamese_query(
     1. Add Vietnamese site filters (trusted news sources)
     2. Extract and emphasize key entities from claim
     3. Add language-specific search operators
+    4. Add current year for time-sensitive queries
     
     Args:
         query: Original search query
@@ -169,6 +170,14 @@ def enhance_vietnamese_query(
         Enhanced query string
     """
     enhanced = query
+    
+    # Add current year for time-sensitive queries
+    from datetime import datetime
+    current_year = datetime.now().year
+    time_keywords = ['hiện nay', 'hiện tại', 'bây giờ', 'current', 'now', 'present']
+    if any(keyword in query.lower() for keyword in time_keywords):
+        if str(current_year) not in query:
+            enhanced = f"{enhanced} {current_year}"
     
     if claim and prefer_vietnamese and VIETNAMESE_SUPPORT:
         try:
@@ -210,11 +219,13 @@ class VietnameseSerperAPI:
         self.k = k
         self.prefer_vietnamese = prefer_vietnamese
         
+        # Use tbs='qdr:y' for results from past year (more recent)
         self.base_api = SerperAPI(
             serper_api_key=serper_api_key,
             gl='vn',
             hl='vi',
-            k=k
+            k=k,
+            tbs='qdr:y'  # Filter to past year for recent information
         )
     
     def run(self, query: str, claim: Optional[str] = None, k: Optional[int] = None) -> str:

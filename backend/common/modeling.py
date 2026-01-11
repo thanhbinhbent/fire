@@ -1,5 +1,3 @@
-"""Unified LLM interface using LiteLLM for 100+ providers."""
-
 import os
 import litellm
 from typing import Optional, Dict, Tuple, Any
@@ -12,19 +10,6 @@ SYS_PROMPT = 'You are a fact-checking agent responsible for verifying the accura
 
 
 class Model:
-    """Unified LLM interface using LiteLLM.
-    
-    Supports 100+ providers: OpenAI, Anthropic, Azure, Groq, Gemini, Cohere, etc.
-    Model format: provider/model-name or organization:model_id (legacy)
-    
-    Examples:
-        - openai/gpt-4o-mini
-        - anthropic/claude-3-5-sonnet-20241022
-        - groq/llama-3.1-70b-versatile
-        - gemini/gemini-1.5-pro
-        - azure/gpt-4
-    """
-
     def __init__(
         self,
         model_name: Optional[str] = None,
