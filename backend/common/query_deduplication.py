@@ -1,9 +1,3 @@
-# common/query_deduplication.py
-"""
-Embedding-based query deduplication to avoid redundant searches.
-Uses PhoBERT embeddings and cosine similarity.
-"""
-
 from typing import List, Tuple
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -32,7 +26,6 @@ class QueryDeduplicator:
         self.tokenizer = None
         self.model = None
         
-        # Lazy loading - only load model when first used
         self._model_loaded = False
 
     def _load_model(self):
@@ -44,19 +37,18 @@ class QueryDeduplicator:
             print(f"📥 Loading embedding model: {self.model_name}")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self.model = AutoModel.from_pretrained(self.model_name)
-            self.model.eval()  # Set to evaluation mode
+            self.model.eval()
             
-            # Move to GPU if available
             if torch.cuda.is_available():
                 self.model = self.model.cuda()
-                print("✅ Model loaded on GPU")
+                print("Model loaded on GPU")
             else:
-                print("✅ Model loaded on CPU")
+                print("Model loaded on CPU")
             
             self._model_loaded = True
         except Exception as e:
-            print(f"⚠️ Could not load PhoBERT model: {e}")
-            print("⚠️ Falling back to simple string matching")
+            print(f"Could not load PhoBERT model: {e}")
+            print("Falling back to simple string matching")
             self._model_loaded = False
 
     def _get_embedding(self, text: str) -> np.ndarray:
@@ -72,11 +64,9 @@ class QueryDeduplicator:
         self._load_model()
         
         if not self._model_loaded:
-            # Fallback: use simple hash-based embedding
             return np.array([hash(text) % 10000])
         
         try:
-            # Tokenize
             inputs = self.tokenizer(
                 text,
                 return_tensors="pt",
@@ -85,19 +75,16 @@ class QueryDeduplicator:
                 max_length=256
             )
             
-            # Move to same device as model
             if torch.cuda.is_available() and next(self.model.parameters()).is_cuda:
                 inputs = {k: v.cuda() for k, v in inputs.items()}
 
-            # Get embeddings
             with torch.no_grad():
                 outputs = self.model(**inputs)
 
-            # Use [CLS] token embedding (first token)
             embedding = outputs.last_hidden_state[:, 0, :].squeeze().cpu().numpy()
             return embedding
         except Exception as e:
-            print(f"⚠️ Embedding error: {e}")
+            print(f"Embedding error: {e}")
             return np.array([hash(text) % 10000])
 
     def is_duplicate(self, query: str) -> Tuple[bool, float]:
@@ -113,10 +100,8 @@ class QueryDeduplicator:
         if not self.query_history:
             return False, 0.0
 
-        # Get embedding for new query
         new_embedding = self._get_embedding(query)
 
-        # Calculate similarities with all previous queries
         similarities = cosine_similarity(
             [new_embedding],
             self.embeddings
@@ -124,7 +109,6 @@ class QueryDeduplicator:
 
         max_similarity = float(np.max(similarities))
 
-        # Check if any similarity exceeds threshold
         is_dup = max_similarity >= self.threshold
 
         return is_dup, max_similarity
@@ -154,9 +138,9 @@ class QueryDeduplicator:
 
         if not is_dup:
             self.add_query(query)
-            print(f"✅ Added new query: {query[:50]}...")
+            print(f"Added new query: {query[:50]}...")
         else:
-            print(f"⚠️ Skipping duplicate query (similarity={similarity:.2f}): {query[:50]}...")
+            print(f"Skipping duplicate query (similarity={similarity:.2f}): {query[:50]}...")
 
         return is_dup, similarity
 

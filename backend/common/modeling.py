@@ -5,9 +5,8 @@ import litellm
 from typing import Optional, Dict, Tuple, Any
 from common import utils
 
-# Configure LiteLLM
-litellm.suppress_debug_info = True  # Reduce verbose logging
-litellm.drop_params = True  # Auto-drop unsupported params for each provider
+litellm.suppress_debug_info = True
+litellm.drop_params = True
 
 SYS_PROMPT = 'You are a fact-checking agent responsible for verifying the accuracy of claims.'
 
@@ -49,7 +48,6 @@ class Model:
             api_key: Optional API key override
             base_url: Optional base URL override
         """
-        # Load defaults from environment variables
         self.model_name = self._parse_model_name(
             model_name or os.getenv('DEFAULT_MODEL_NAME', 'openai/gpt-4o-mini')
         )
@@ -64,7 +62,6 @@ class Model:
         self.api_key = api_key
         self.base_url = base_url
         
-        # Setup API keys from environment if not provided
         self._setup_api_keys()
         
         print(f"🚀 Initialized LiteLLM model: {self.model_name}")
@@ -75,7 +72,6 @@ class Model:
         Converts legacy 'organization:model' to 'provider/model' format.
         """
         if ':' in model_name:
-            # Legacy format: organization:model_id
             org, model_id = model_name.split(':', 1)
             provider_map = {
                 'openai': 'openai',
@@ -85,10 +81,8 @@ class Model:
             provider = provider_map.get(org, org)
             return f"{provider}/{model_id}"
         elif '/' in model_name:
-            # Modern format: provider/model
             return model_name
         else:
-            # Assume OpenAI if no prefix
             return f"openai/{model_name}"
     
     def _setup_api_keys(self) -> None:
@@ -124,16 +118,14 @@ class Model:
             Tuple of (response_text, usage_dict)
         """
         if self.show_prompts:
-            print(f"\n📝 Prompt:\n{context}\n")
+            print(f"\nPrompt:\n{context}\n")
         
         try:
-            # Prepare messages
             messages = [
                 {"role": "system", "content": system_prompt or SYS_PROMPT},
                 {"role": "user", "content": context}
             ]
             
-            # Prepare kwargs
             kwargs = {
                 "model": self.model_name,
                 "messages": messages,
@@ -141,21 +133,16 @@ class Model:
                 "max_tokens": self.max_tokens,
             }
             
-            # Add API key if provided
             if self.api_key:
                 kwargs["api_key"] = self.api_key
             
-            # Add base URL if provided
             if self.base_url:
                 kwargs["api_base"] = self.base_url
             
-            # Call LiteLLM
             response = litellm.completion(**kwargs)
             
-            # Extract response content
             content = response.choices[0].message.content
             
-            # Extract usage metadata
             usage = None
             if hasattr(response, 'usage') and response.usage:
                 usage = {

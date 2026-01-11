@@ -13,7 +13,6 @@ from eval.fire import query_serper
 from eval.fire.query_serper import SerperAPI
 from sentence_transformers import SentenceTransformer, util
 
-# Vietnamese components - graceful fallback if not available
 try:
     from common.vietnamese_utils import preprocessor
     from common.query_deduplication import deduplicator as query_deduplicator
@@ -29,6 +28,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 sbert_model = SentenceTransformer('all-MiniLM-L6-v2').to(device)
 _Factual_LABEL = 'True'
 _Non_Factual_LABEL = 'False'
+_NEI_LABEL = 'Not Enough Info'
 _STATEMENT_PLACEHOLDER = '[STATEMENT]'
 _KNOWLEDGE_PLACEHOLDER = '[KNOWLEDGE]'
 
@@ -47,7 +47,9 @@ Instructions:
 
 5. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
    - If KNOWLEDGE is empty or about current events/people: {{"search_query": "Your search query"}}
-   - If you can make a confident decision based on KNOWLEDGE: {{"final_answer": "{_Factual_LABEL}"}} or {{"final_answer": "{_Non_Factual_LABEL}"}}
+   - If you can confidently verify as true: {{"final_answer": "{_Factual_LABEL}"}}
+   - If you can confidently verify as false: {{"final_answer": "{_Non_Factual_LABEL}"}}
+   - If evidence is insufficient to determine truth: {{"final_answer": "{_NEI_LABEL}"}}
    - If you need more information: {{"search_query": "Your search query here"}}
 
 6. Format example:
@@ -75,7 +77,9 @@ Instructions:
    - Write naturally in Vietnamese like you're explaining to a person
 
 4. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
-   {{"final_answer": "{_Factual_LABEL}"}} or {{"final_answer": "{_Non_Factual_LABEL}"}}
+   - True: {{"final_answer": "{_Factual_LABEL}"}}
+   - False: {{"final_answer": "{_Non_Factual_LABEL}"}}
+   - Not enough evidence: {{"final_answer": "{_NEI_LABEL}"}}
 
 5. Format example:
    [Your Vietnamese explanation here - 2-3 paragraphs]
@@ -108,25 +112,22 @@ def call_search(
         search_type: str = fire_config.search_type,
         num_searches: int = fire_config.num_searches,
         serper_api_key: str = shared_config.serper_api_key,
-        search_postamble: str = '',  # ex: 'site:https://en.wikipedia.org'
-        atomic_claim: str = '',  # for Vietnamese enhancement and caching
+        search_postamble: str = '',
+        atomic_claim: str = '',
 ) -> str:
     """Call Google Search to get the search result with Vietnamese enhancements."""
     
-    # Vietnamese Enhancement 1: Check cache first
     if VIETNAMESE_SUPPORT and atomic_claim:
         cached = fact_check_db.get_cached_search(search_query)
         if cached:
             return cached
     
-    # Vietnamese Enhancement 2: Query deduplication check
     if VIETNAMESE_SUPPORT:
         is_dup, similarity = query_deduplicator.check_and_add(search_query)
         if is_dup:
             print(f"⚠️ Skipping duplicate query (similarity={similarity:.2f}): {search_query[:50]}...")
             return "[Duplicate query - skipped to reduce API costs]"
     
-    # Vietnamese Enhancement 3: Enhance query for Vietnamese search
     if VIETNAMESE_SUPPORT:
         try:
             enhanced_query = query_serper.enhance_vietnamese_query(search_query)
@@ -137,7 +138,6 @@ def call_search(
     search_query += f' {search_postamble}' if search_postamble else ''
 
     if search_type == 'serper':
-        # Use Vietnamese-aware Serper API if available
         if VIETNAMESE_SUPPORT and hasattr(query_serper, 'VietnameseSerperAPI'):
             serper_searcher = query_serper.VietnameseSerperAPI(serper_api_key, k=num_searches)
         else:
@@ -145,7 +145,6 @@ def call_search(
         
         result = serper_searcher.run(search_query, k=num_searches)
         
-        # Vietnamese Enhancement 4: Cache the result
         if VIETNAMESE_SUPPORT and atomic_claim:
             fact_check_db.cache_search(search_query, result)
         
@@ -217,7 +216,6 @@ def final_answer_or_next_search(
                                                                     threshold=0.9) >= tolerance - 1:
             return '_Early_Stop', usage
 
-        # Pass atomic_claim for Vietnamese enhancements
         search_result = call_search(answer_or_next_query['search_query'], atomic_claim=atomic_claim)
         return GoogleSearchResult(query=answer_or_next_query['search_query'], result=search_result), usage
     else:
@@ -241,28 +239,23 @@ def must_get_final_answer(
     full_prompt = utils.strip_string(full_prompt)
 
     try:
-        # Generate model response
         model_response, usage = model.generate(full_prompt)
         
         if not model_response:
-            return None, None  # Handle case where model doesn't return a response
+            return None, None
         
-        # Extract and sanitize the answer
         answer = utils.extract_json_from_output(model_response)
         if not answer:
-            return None, None  # Handle case where no answer is extracted
+            return None, None
         
-        # Attempt to sanitize the answer with re.sub, handling potential errors
         if 'final_answer' in answer:
             final_answer = answer['final_answer']
 
-        # Validate if the sanitized answer matches expected labels
-        if final_answer in [_Factual_LABEL, _Non_Factual_LABEL]:
+        if final_answer in [_Factual_LABEL, _Non_Factual_LABEL, _NEI_LABEL]:
             return FinalAnswer(response=model_response, answer=final_answer), usage
         else:
-            return None, None  # Answer is not valid
+            return None, None
     except Exception as e:
-        # General exception handling for unexpected errors
         print(f"Error in must_get_final_answer: {e}")
         return None, None
 
@@ -284,17 +277,15 @@ def verify_atomic_claim(
     :return: FinalAnswer or None, search results, usage of tokens for verifying one atomic claim.
     '''
     
-    # Vietnamese Enhancement: Preprocess the claim
     preprocessed_claim = atomic_claim
     if VIETNAMESE_SUPPORT:
         try:
             processed_result = preprocessor.preprocess_claim(atomic_claim)
-            # Handle both dict and string returns
             if isinstance(processed_result, dict):
                 preprocessed_claim = processed_result.get('normalized', atomic_claim)
             else:
                 preprocessed_claim = str(processed_result)
-            print(f"📝 Preprocessed claim: {preprocessed_claim[:100]}...")
+            print(f"Preprocessed claim: {preprocessed_claim[:100]}...")
         except Exception as e:
             print(f"⚠️ Preprocessing failed, using original claim: {e}")
             preprocessed_claim = atomic_claim
@@ -306,7 +297,7 @@ def verify_atomic_claim(
     }
 
     stop_search = False
-    min_searches = 1  # Force at least 1 search to avoid outdated LLM knowledge
+    min_searches = 1
     
     for step in range(max_steps):
         answer_or_next_search, num_tries = None, 0
@@ -328,35 +319,29 @@ def verify_atomic_claim(
         elif isinstance(answer_or_next_search, GoogleSearchResult):
             search_results.append(answer_or_next_search)
         elif isinstance(answer_or_next_search, FinalAnswer):
-            # Force at least min_searches before accepting final answer
             if len(search_results) < min_searches:
                 print(f"⚠️ LLM tried to answer without search. Forcing search... (Step {step+1}/{max_steps})")
-                # Generate default search query from claim
                 default_query = f"{atomic_claim} hiện nay 2024"
                 print(f"🔍 Auto-generated query: {default_query}")
                 search_result_text = call_search(default_query, atomic_claim=atomic_claim)
                 search_results.append(GoogleSearchResult(query=default_query, result=search_result_text))
                 continue
             
-            # Vietnamese Enhancement: Validate evidence and calculate confidence
             if VIETNAMESE_SUPPORT:
                 try:
-                    # Calculate evidence quality score
                     evidence_scores = []
                     for search in search_results:
-                        # Ensure preprocessed_claim is string
                         claim_text = preprocessed_claim if isinstance(preprocessed_claim, str) else str(preprocessed_claim)
                         
                         validation = evidence_validator.validate_evidence(
                             evidence_text=search.result,
-                            source_url=search.query,  # Use query as proxy for source
+                            source_url=search.query,
                             claim=claim_text
                         )
                         evidence_scores.append(validation['overall_score'])
                     
                     avg_evidence_quality = sum(evidence_scores) / len(evidence_scores) if evidence_scores else 0.5
                     
-                    # Calculate confidence - ensure claim_length is from string
                     claim_text = preprocessed_claim if isinstance(preprocessed_claim, str) else str(preprocessed_claim)
                     confidence = confidence_calibrator.calculate_confidence(
                         verdict=answer_or_next_search.answer,
@@ -372,13 +357,11 @@ def verify_atomic_claim(
                         claim_complexity=len(claim_text.split())
                     )
                     
-                    # Get Vietnamese verdict label
                     verdict_label = confidence_calibrator.get_verdict_label(
                         answer_or_next_search.answer,
                         confidence
                     )
                     
-                    # Save to database
                     fact_check_db.save_verification(
                         claim=atomic_claim,
                         verdict=answer_or_next_search.answer,
@@ -388,7 +371,7 @@ def verify_atomic_claim(
                         searches=[{'query': s.query, 'result': s.result} for s in search_results]
                     )
                     
-                    print(f"✅ Confidence: {confidence:.3f}, Is confident: {is_confident}")
+                    print(f"Confidence: {confidence:.3f}, Is confident: {is_confident}")
                     print(f"🏷️ Verdict: {verdict_label}")
                     
                 except Exception as e:
@@ -401,7 +384,6 @@ def verify_atomic_claim(
             }
             return answer_or_next_search, search_dicts, total_usage
 
-    # At the last step, we must reach the final answer, with whatever the information we have so far.
     final_answer, num_tries = None, 0
     while not final_answer and num_tries <= max_retries:
         num_tries += 1
@@ -410,7 +392,6 @@ def verify_atomic_claim(
             total_usage['input_tokens'] += usage['input_tokens']
             total_usage['output_tokens'] += usage['output_tokens']
     
-    # Vietnamese Enhancement: Apply confidence and evidence validation to final answer
     if VIETNAMESE_SUPPORT and final_answer:
         try:
             evidence_scores = []
@@ -446,7 +427,7 @@ def verify_atomic_claim(
                 searches=[{'query': s.query, 'result': s.result} for s in search_results]
             )
             
-            print(f"✅ Final Confidence: {confidence:.3f}")
+            print(f"Final Confidence: {confidence:.3f}")
             print(f"🏷️ Final Verdict: {verdict_label}")
         except Exception as e:
             print(f"Vietnamese final enhancements failed: {e}")

@@ -1,6 +1,3 @@
-# common/database.py
-"""SQLite database for caching and storing verification results."""
-
 import sqlite3
 import json
 from datetime import datetime
@@ -42,7 +39,6 @@ class FactCheckDB:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        # Claims table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS claims (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +49,6 @@ class FactCheckDB:
             )
         """)
 
-        # Verifications table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS verifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +63,6 @@ class FactCheckDB:
             )
         """)
 
-        # Evidence table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS evidence (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,7 +76,6 @@ class FactCheckDB:
             )
         """)
 
-        # Search cache table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS search_cache (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,13 +85,12 @@ class FactCheckDB:
             )
         """)
 
-        # Create indexes for better performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_claims_text ON claims(claim_text)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cache_query ON search_cache(query)")
 
         conn.commit()
         conn.close()
-        print("✅ Database initialized successfully")
+        print("Database initialized successfully")
 
     def cache_search(self, query: str, results: str):
         """Cache search results to avoid redundant API calls."""
@@ -112,7 +104,7 @@ class FactCheckDB:
             )
             conn.commit()
         except Exception as e:
-            print(f"⚠️ Cache save error: {e}")
+            print(f"Cache save error: {e}")
         finally:
             conn.close()
 
@@ -129,7 +121,7 @@ class FactCheckDB:
             result = cursor.fetchone()
             return result[0] if result else None
         except Exception as e:
-            print(f"⚠️ Cache retrieve error: {e}")
+            print(f"Cache retrieve error: {e}")
             return None
         finally:
             conn.close()
@@ -148,7 +140,6 @@ class FactCheckDB:
         cursor = conn.cursor()
 
         try:
-            # Insert or get claim
             cursor.execute(
                 "INSERT OR IGNORE INTO claims (claim_text, claim_hash) VALUES (?, ?)",
                 (claim, str(hash(claim)))
@@ -156,7 +147,6 @@ class FactCheckDB:
             cursor.execute("SELECT id FROM claims WHERE claim_text = ?", (claim,))
             claim_id = cursor.fetchone()[0]
 
-            # Insert verification
             cursor.execute("""
                 INSERT INTO verifications
                 (claim_id, verdict, confidence, reasoning, model_used, iterations)
@@ -165,7 +155,6 @@ class FactCheckDB:
 
             verification_id = cursor.lastrowid
 
-            # Insert evidence from searches
             for search in searches:
                 for result in search.get('results', []):
                     cursor.execute("""
@@ -182,7 +171,7 @@ class FactCheckDB:
             conn.commit()
             return verification_id
         except Exception as e:
-            print(f"⚠️ Verification save error: {e}")
+            print(f"Verification save error: {e}")
             conn.rollback()
             return -1
         finally:
@@ -212,26 +201,22 @@ class FactCheckDB:
                 })
             return results
         except Exception as e:
-            print(f"⚠️ Retrieve error: {e}")
+            print(f"Retrieve error: {e}")
             return []
         finally:
             conn.close()
 
 
-# Global database instance
 db = FactCheckDB()
 
 
-# Testing
 if __name__ == "__main__":
     print("Testing database...")
     
-    # Test cache
     db.cache_search("test query", "test results")
     cached = db.get_cached_search("test query")
     print(f"Cached result: {cached}")
     
-    # Test verification
     verification_id = db.save_verification(
         claim="Test claim",
         verdict="SUPPORTS",
@@ -242,6 +227,5 @@ if __name__ == "__main__":
     )
     print(f"Verification ID: {verification_id}")
     
-    # Get recent
     recent = db.get_recent_verifications(5)
     print(f"Recent verifications: {len(recent)}")

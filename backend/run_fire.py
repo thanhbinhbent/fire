@@ -15,7 +15,6 @@ from common.utils import calculate_cost_claude
 
 
 def main():
-    # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='Run FIRE fact-checking framework')
     parser.add_argument('--model', type=str, required=True,
@@ -32,12 +31,10 @@ def main():
 
     args = parser.parse_args()
 
-    # Set API keys for various services
     os.environ["ANTHROPIC_API_KEY"] = anthropic_api_key
     os.environ['OPENAI_API_KEY'] = openai_api_key
     os.environ["SERPER_API_KEY"] = serper_api_key
 
-    # Map dataset names
     dataset_map = {
         'factcheck_bench': 'factcheckbench',
         'factcheckbench': 'factcheckbench',
@@ -50,29 +47,23 @@ def main():
     benchmark = dataset_map.get(args.dataset.lower(), args.dataset)
     framework = args.framework
 
-    # Prepare model name with prefix if needed
     model_name_full = args.model
     if not any(prefix in args.model for prefix in ['openai:', 'anthropic:', 'together:']):
-        # Add openai prefix for common models
         if args.model.startswith('gpt') or args.model.startswith('o1'):
             model_name_full = f'openai:{args.model}'
         elif args.model.startswith('claude'):
             model_name_full = f'anthropic:{args.model}'
 
-    # Import the appropriate fact-checking function based on the framework
     if framework == 'fire':
         from eval.fire.verify_atomic_claim import verify_atomic_claim
     elif framework == 'safe':
         from eval.safe.rate_atomic_fact import check_atomic_fact
-        verify_atomic_claim = check_atomic_fact  # Alias for compatibility
+        verify_atomic_claim = check_atomic_fact
 
-    # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Dataset path
     dataset_path = f'datasets/{benchmark}/data.jsonl'
 
-    # Check if dataset exists
     if not os.path.exists(dataset_path):
         print(f"❌ Error: Dataset file not found: {dataset_path}")
         print(f"Available datasets:")
@@ -93,53 +84,42 @@ def main():
         print(f'\n🚀 Running model: {model_name_full}')
         rater = Model(model_name_full)
         failed_cnt = 0
-        # Extract model name for file saving
         model_name = model_name_full.split(':')[-1].split('/')[-1]
 
-        # Initialize total token usage tracking
         total_usage = {
             'input_tokens': 0,
             'output_tokens': 0,
         }
 
-        # Output file path
         output_file = f'{args.output_dir}/{framework}_{benchmark}_{model_name}.jsonl'
 
-        # Read dataset
         with open(dataset_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
-        # Apply limit if specified
         if args.limit:
             lines = lines[:args.limit]
 
         print(f"📊 Processing {len(lines)} claims...")
 
-        # Open output file to save the results
         with open(output_file, 'w', encoding='utf-8') as fout:
-            # Read and process each line from the dataset
             for line in tqdm(lines, desc="Processing claims"):
-                data = json.loads(line)  # Load JSON data
-                claim = data['claim']    # Extract the claim
-                label = data['label']    # Extract the label
+                data = json.loads(line)
+                claim = data['claim']
+                label = data['label']
 
                 try:
-                    # Run the fact-checking function for the claim
                     result, searches, usage = verify_atomic_claim(claim, rater)
 
-                    # Track token usage if available
                     if usage is not None:
                         total_usage['input_tokens'] += usage.get(
                             'input_tokens', 0)
                         total_usage['output_tokens'] += usage.get(
                             'output_tokens', 0)
 
-                    # If result is None, count it as a failure and skip further processing
                     if result is None:
                         failed_cnt += 1
                         continue
 
-                    # Write the result to the output file
                     fout.write(json.dumps({
                         'claim': claim,
                         'label': label,
@@ -154,7 +134,7 @@ def main():
                     continue
 
         print(f"\n" + "=" * 60)
-        print(f'✅ All fact checking results saved to: {output_file}')
+        print(f'All fact checking results saved to: {output_file}')
         print(f'❌ Failed claims: {failed_cnt}')
         print(f"\n📊 Token Usage:")
         print(f"   Input tokens:  {total_usage['input_tokens']:,}")

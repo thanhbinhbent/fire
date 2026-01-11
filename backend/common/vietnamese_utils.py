@@ -1,4 +1,3 @@
-# common/vietnamese_utils.py
 """Vietnamese text preprocessing utilities."""
 
 import re
@@ -11,7 +10,6 @@ class VietnamesePreprocessor:
     """Vietnamese text normalization and tokenization."""
 
     def __init__(self):
-        # Common Vietnamese abbreviations
         self.abbreviations = {
             "TPHCM": "Thành phố Hồ Chí Minh",
             "TP.HCM": "Thành phố Hồ Chí Minh",
@@ -32,14 +30,11 @@ class VietnamesePreprocessor:
         - Expand abbreviations
         - Remove extra whitespace
         """
-        # Normalize Unicode
         text = unicodedata.normalize('NFC', text)
 
-        # Expand abbreviations
         for abbr, full in self.abbreviations.items():
             text = re.sub(rf'\b{re.escape(abbr)}\b', full, text, flags=re.IGNORECASE)
 
-        # Remove extra whitespace
         text = re.sub(r'\s+', ' ', text).strip()
 
         return text
@@ -50,7 +45,6 @@ class VietnamesePreprocessor:
             return sent_tokenize(text)
         except Exception as e:
             print(f"⚠️ Sentence tokenization error: {e}")
-            # Fallback: split by common punctuation
             return [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
 
     def tokenize_words(self, text: str) -> List[str]:
@@ -59,7 +53,6 @@ class VietnamesePreprocessor:
             return word_tokenize(text, format="text").split()
         except Exception as e:
             print(f"⚠️ Word tokenization error: {e}")
-            # Fallback: simple split
             return text.split()
 
     def extract_entities(self, text: str) -> List[Dict]:
@@ -72,10 +65,10 @@ class VietnamesePreprocessor:
             results = []
 
             for entity in entities_raw:
-                if len(entity) >= 4 and entity[3] != 'O':  # Not "Outside" tag
+                if len(entity) >= 4 and entity[3] != 'O':
                     results.append({
                         "text": entity[0],
-                        "type": entity[3],  # B-PER, I-PER, B-LOC, etc.
+                        "type": entity[3],
                         "pos": entity[1] if len(entity) > 1 else "",
                     })
 
@@ -104,17 +97,14 @@ class VietnamesePreprocessor:
         }
 
 
-# Global instance
 preprocessor = VietnamesePreprocessor()
 
 
-# Standalone testing
 if __name__ == "__main__":
-    # Test preprocessing
     test_claim = "TP.HCM có hơn 10 triệu dân vào năm 2024"
     result = preprocessor.preprocess_claim(test_claim)
     
-    print("📝 Preprocessing Test:")
+    print("Preprocessing Test:")
     print(f"Original: {result['original']}")
     print(f"Normalized: {result['normalized']}")
     print(f"Tokens: {result['tokens'][:10]}")

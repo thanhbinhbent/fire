@@ -1,9 +1,3 @@
-# common/evidence_validator.py
-"""
-Vietnamese-aware evidence validation and credibility scoring.
-Implements post-processing validation layer.
-"""
-
 from typing import List, Dict, Optional
 import re
 from urllib.parse import urlparse
@@ -19,16 +13,13 @@ class EvidenceValidator:
     """
 
     def __init__(self):
-        # Trusted Vietnamese news sources (tier-based)
         self.trusted_sources = {
-            # Tier 1: Official government/state media
             "tier1": [
                 "baochinhphu.vn",
                 "vnexpress.net",
                 "vtv.vn",
                 "vov.vn",
             ],
-            # Tier 2: Major reputable news
             "tier2": [
                 "tuoitre.vn",
                 "thanhnien.vn",
@@ -36,7 +27,6 @@ class EvidenceValidator:
                 "dantri.com.vn",
                 "zing.vn",
             ],
-            # Tier 3: Other established news
             "tier3": [
                 "vietnamplus.vn",
                 "tienphong.vn",
@@ -46,7 +36,6 @@ class EvidenceValidator:
             ]
         }
 
-        # Create flat list for quick lookup
         self.all_trusted = []
         for sources in self.trusted_sources.values():
             self.all_trusted.extend(sources)
@@ -65,7 +54,6 @@ class EvidenceValidator:
             domain = urlparse(url).netloc.lower()
             domain = domain.replace("www.", "")
 
-            # Check tier membership
             if domain in self.trusted_sources["tier1"]:
                 return 1.0
             elif domain in self.trusted_sources["tier2"]:
@@ -75,7 +63,6 @@ class EvidenceValidator:
             elif any(trusted in domain for trusted in self.all_trusted):
                 return 0.5
             else:
-                # Unknown source - check for .vn domain
                 if domain.endswith('.vn'):
                     return 0.4
                 return 0.3
@@ -96,20 +83,16 @@ class EvidenceValidator:
         if not text:
             return 0.0
 
-        score = 0.5  # Base score
-
-        # Check for Vietnamese diacritics
+        score = 0.5
         vietnamese_chars = "àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ"
         has_vietnamese = any(char in text.lower() for char in vietnamese_chars)
         if has_vietnamese:
             score += 0.2
 
-        # Check sentence structure (presence of punctuation)
         has_punctuation = any(p in text for p in ".!?")
         if has_punctuation:
             score += 0.15
 
-        # Check length (not too short)
         if len(text) > 50:
             score += 0.15
 
@@ -135,11 +118,9 @@ class EvidenceValidator:
         claim_lower = claim.lower()
         evidence_lower = evidence.lower()
 
-        # Keyword overlap
         claim_words = set(claim_lower.split())
         evidence_words = set(evidence_lower.split())
         
-        # Remove common stopwords
         stopwords = {'là', 'của', 'và', 'có', 'được', 'trong', 'để', 'cho', 'với', 'từ', 'theo', 'trên'}
         claim_words = claim_words - stopwords
         evidence_words = evidence_words - stopwords
@@ -147,13 +128,11 @@ class EvidenceValidator:
         overlap = len(claim_words & evidence_words)
         overlap_ratio = overlap / len(claim_words) if claim_words else 0
 
-        # Entity matching (if provided)
         entity_score = 0.0
         if entities:
             entity_matches = sum(1 for entity in entities if entity.lower() in evidence_lower)
             entity_score = entity_matches / len(entities) if entities else 0
 
-        # Combined score
         if entities:
             relevance = (overlap_ratio * 0.6) + (entity_score * 0.4)
         else:
@@ -180,12 +159,10 @@ class EvidenceValidator:
         Returns:
             dict: Validation results with scores
         """
-        # Calculate individual scores
         credibility = self.get_source_credibility(source_url)
         language_quality = self.check_language_quality(evidence_text)
         relevance = self.calculate_relevance(claim, evidence_text, entities)
 
-        # Overall quality score (weighted average)
         overall_score = (
             credibility * 0.4 +
             language_quality * 0.2 +
@@ -197,7 +174,7 @@ class EvidenceValidator:
             "credibility": credibility,
             "language_quality": language_quality,
             "relevance": relevance,
-            "is_valid": overall_score >= 0.5,  # Threshold for valid evidence
+            "is_valid": overall_score >= 0.5,
             "source_url": source_url,
         }
 
@@ -222,27 +199,22 @@ class EvidenceValidator:
         ]
 
 
-# Global instance
 validator = EvidenceValidator()
 
 
-# Testing
 if __name__ == "__main__":
     print("Testing evidence validator...")
     
-    # Test credibility
     cred1 = validator.get_source_credibility("https://vnexpress.net/article")
     print(f"VNExpress credibility: {cred1}")
     
     cred2 = validator.get_source_credibility("https://unknown-site.com/article")
     print(f"Unknown site credibility: {cred2}")
     
-    # Test language quality
     text_vn = "Việt Nam có dân số hơn 100 triệu người vào năm 2024."
     quality = validator.check_language_quality(text_vn)
     print(f"Vietnamese text quality: {quality}")
     
-    # Test full validation
     validation = validator.validate_evidence(
         evidence_text=text_vn,
         source_url="https://vnexpress.net/article",

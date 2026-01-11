@@ -1,5 +1,3 @@
-# api.py - Enhanced version with full Vietnamese pipeline
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,10 +5,8 @@ from typing import List, Optional, Dict
 import sys
 import os
 
-# Add parent directory to path to import fire modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import all Vietnamese components
 try:
     from common.modeling import Model
     from common import shared_config
@@ -22,13 +18,12 @@ try:
     from eval.fire.verify_atomic_claim import verify_atomic_claim
     VIETNAMESE_SUPPORT = True
 except ImportError as e:
-    print(f"⚠️ Some Vietnamese components not available: {e}")
+    print(f"Some Vietnamese components not available: {e}")
     VIETNAMESE_SUPPORT = False
     verify_atomic_claim = None
 
 app = FastAPI(title="Vietnamese Fact Checking API")
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
@@ -37,41 +32,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize model globally using centralized config
 rater = None
 
 try:
-    # Set environment variables from shared_config (centralized)
     os.environ["OPENAI_API_KEY"] = shared_config.openai_api_key
     os.environ["ANTHROPIC_API_KEY"] = shared_config.anthropic_api_key
     os.environ["SERPER_API_KEY"] = shared_config.serper_api_key
     os.environ["GROQ_API_KEY"] = shared_config.groq_api_key
     os.environ["GEMINI_API_KEY"] = shared_config.gemini_api_key
     
-    # Initialize model with centralized config
     rater = Model(
         model_name=shared_config.default_model_name,
         temperature=shared_config.default_temperature,
         max_tokens=shared_config.default_max_tokens
     )
-    print(f"✅ Model initialized: {shared_config.default_model_name}")
-    print(f"🌡️ Temperature: {shared_config.default_temperature}")
-    print(f"📝 Max tokens: {shared_config.default_max_tokens}")
+    print(f"Model initialized: {shared_config.default_model_name}")
+    print(f"Temperature: {shared_config.default_temperature}")
+    print(f"Max tokens: {shared_config.default_max_tokens}")
 except Exception as e:
-    print(f"⚠️ Model initialization failed: {e}")
+    print(f"Model initialization failed: {e}")
 
 
 class FactCheckRequest(BaseModel):
     claim: str
-    model: Optional[str] = None  # Allow model override
+    model: Optional[str] = None
 
 
 class FactCheckResponse(BaseModel):
-    verdict: str  # "Đúng (Rất chắc chắn)", "Sai (Chắc chắn)", etc.
+    verdict: str
     explanation: str
-    sources: Optional[List[Dict]] = None  # Include validation scores
+    sources: Optional[List[Dict]] = None
     confidence: Optional[float] = None
-    metadata: Optional[Dict] = None  # Preprocessing and dedup stats
+    metadata: Optional[Dict] = None
 
 
 @app.get("/")
@@ -105,7 +97,6 @@ async def check_fact(request: FactCheckRequest):
         raise HTTPException(status_code=503, detail="Model not initialized")
     
     try:
-        # Use custom model if provided
         model_instance = rater
         if request.model:
             try:
@@ -115,68 +106,58 @@ async def check_fact(request: FactCheckRequest):
                     max_tokens=shared_config.default_max_tokens
                 )
             except Exception as e:
-                print(f"⚠️ Failed to load custom model: {e}, using default")
+                print(f"Failed to load custom model: {e}, using default")
         
-        # LAYER 1: Preprocess Vietnamese claim
         processed = None
         entities = []
         if VIETNAMESE_SUPPORT:
             try:
                 processed = preprocessor.preprocess_claim(request.claim)
                 entities = [e['text'] for e in processed['entities']]
-                print(f"✅ Preprocessed: {processed['normalized']}")
+                print(f"Preprocessed: {processed['normalized']}")
                 print(f"🏷️ Entities: {entities}")
             except Exception as e:
-                print(f"⚠️ Preprocessing error: {e}")
+                print(f"Preprocessing error: {e}")
         
-        # REAL VERIFICATION with FIRE pipeline
         if verify_atomic_claim and VIETNAMESE_SUPPORT:
             print(f"🔍 Starting verification for: {request.claim}")
             
-            # Call real verification
             final_answer, search_results, usage = verify_atomic_claim(
                 atomic_claim=request.claim,
                 rater=model_instance,
-                max_steps=3,  # Limit steps for API response time
+                max_steps=3,
                 max_retries=2,
                 diverse_prompt=True,
                 tolerance=2
             )
             
-            # Extract google_searches list from the returned dict
             google_searches = search_results.get('google_searches', [])
             print(f"📊 Verification complete. Searches: {len(google_searches)}")
             
             if final_answer:
-                # Extract verdict and explanation
-                verdict = final_answer.answer  # "Supported", "Refuted", "Not Enough Info"
-                raw_response = final_answer.response  # Full response text
+                verdict = final_answer.answer
+                raw_response = final_answer.response
                 
-                # Map to Vietnamese labels (LLM returns True/False, not Supported/Refuted)
                 verdict_map = {
                     "True": "Đúng",
                     "False": "Sai",
+                    "Not Enough Info": "Chưa đủ thông tin",
                     "NOT ENOUGH INFO": "Chưa đủ thông tin",
-                    # Fallbacks for other formats
                     "Supported": "Đúng",
-                    "Refuted": "Sai"
+                    "Refuted": "Sai",
+                    "NEI": "Chưa đủ thông tin",
                 }
                 verdict_vn = verdict_map.get(verdict, "Chưa rõ")
                 
-                # Extract explanation (remove JSON line at the end since prompt separates them)
                 explanation = raw_response
                 
-                # Remove only the final JSON line (prompt instructs to put it on separate line)
                 import re
                 lines = explanation.split('\n')
-                # Remove lines that are pure JSON objects
                 cleaned_lines = [line for line in lines if not re.match(r'^\s*\{[^}]*"(final_answer|search_query)"[^}]*\}\s*$', line)]
                 explanation = '\n'.join(cleaned_lines).strip()
                 
-                # Build sources from search results
                 sources = []
                 for idx, search in enumerate(google_searches):
-                    # Validate evidence quality (search is a dict now)
                     validation = validator.validate_evidence(
                         evidence_text=search.get('result', ''),
                         source_url=search.get('query', ''),
@@ -184,15 +165,10 @@ async def check_fact(request: FactCheckRequest):
                     )
                     
                     result_text = search.get('result', '')
-                    
-                    # Extract URL from result text if available
-                    # Search results from Serper include URLs in the text
-                    # Format: "Title. URL: https://... Description..."
                     import re
                     url_match = re.search(r'https?://[^\s]+', result_text)
                     source_url = url_match.group(0) if url_match else f"https://google.com/search?q={search.get('query', '')}"
                     
-                    # Extract title (first sentence before URL or description)
                     title_match = result_text.split('.')[0] if '.' in result_text else search.get('query', '')
                     title = title_match[:100] if len(title_match) > 100 else title_match
                     
@@ -204,7 +180,6 @@ async def check_fact(request: FactCheckRequest):
                         "relevance": validation.get('relevance_score', 0.5),
                     })
                 
-                # Calculate confidence
                 evidence_quality = sum(s['credibility'] * s['relevance'] for s in sources) / len(sources) if sources else 0.5
                 confidence_data = calibrator.calculate_confidence(
                     verdict=verdict,
@@ -215,10 +190,8 @@ async def check_fact(request: FactCheckRequest):
                     evidence_quality=evidence_quality
                 )
                 
-                # Get full verdict with confidence label
                 verdict_label = calibrator.get_verdict_label(verdict, confidence_data)
                 
-                # Collect metadata
                 metadata = {
                     "preprocessing": {
                         "normalized": processed['normalized'] if processed else request.claim,
@@ -241,11 +214,9 @@ async def check_fact(request: FactCheckRequest):
                     metadata=metadata
                 )
             else:
-                # Verification failed
                 raise HTTPException(status_code=500, detail="Verification failed - no final answer")
         
         else:
-            # Fallback to mock response if verify_atomic_claim not available
             verdict = "Đúng (Chắc chắn)"
             explanation = f"Mock response - Claim đã được xử lý: {processed['normalized'] if processed else request.claim}"
             confidence = 0.75
@@ -334,7 +305,7 @@ if __name__ == "__main__":
     import uvicorn
     print("🚀 Starting Vietnamese Fact Checking API...")
     print(f"📍 Model: {shared_config.default_model_name}")
-    print(f"🌡️ Temperature: {shared_config.default_temperature}")
+    print(f"Temperature: {shared_config.default_temperature}")
     print(f"🇻🇳 Vietnamese Support: {VIETNAMESE_SUPPORT}")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 

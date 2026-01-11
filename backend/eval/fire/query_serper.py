@@ -9,7 +9,6 @@ import requests
 _SERPER_URL = 'https://google.serper.dev'
 NO_RESULT_MSG = 'No good Google Search result was found'
 
-# Vietnamese-specific imports
 try:
     from common.vietnamese_utils import preprocessor
     VIETNAMESE_SUPPORT = True
@@ -171,25 +170,21 @@ def enhance_vietnamese_query(
     """
     enhanced = query
     
-    # Extract entities from claim for better targeting
     if claim and prefer_vietnamese and VIETNAMESE_SUPPORT:
         try:
             processed = preprocessor.preprocess_claim(claim)
             entities = [e['text'] for e in processed['entities']]
             
-            # Add key entities to query if not already present
-            for entity in entities[:3]:  # Top 3 entities
+            for entity in entities[:3]:
                 if entity.lower() not in query.lower():
                     enhanced = f"{enhanced} {entity}"
         except Exception as e:
             print(f"⚠️ Entity extraction failed: {e}")
     
     if prefer_vietnamese:
-        # Tier-based Vietnamese news sources (prioritize by credibility)
         tier1_sources = ["vnexpress.net", "tuoitre.vn", "thanhnien.vn"]
         tier2_sources = ["vietnamnet.vn", "dantri.com.vn", "baochinhphu.vn"]
         
-        # Prioritize tier 1 sources
         site_filter = " OR ".join([f"site:{source}" for source in tier1_sources + tier2_sources])
         enhanced = f"({enhanced}) ({site_filter})"
     
@@ -215,11 +210,10 @@ class VietnameseSerperAPI:
         self.k = k
         self.prefer_vietnamese = prefer_vietnamese
         
-        # Create base SerperAPI instance
         self.base_api = SerperAPI(
             serper_api_key=serper_api_key,
-            gl='vn',  # Vietnam geolocation
-            hl='vi',  # Vietnamese language
+            gl='vn',
+            hl='vi',
             k=k
         )
     
@@ -235,7 +229,6 @@ class VietnameseSerperAPI:
         Returns:
             str: Search results as formatted string
         """
-        # Enhance query for Vietnamese content
         if self.prefer_vietnamese:
             query = enhance_vietnamese_query(
                 query,
@@ -243,6 +236,5 @@ class VietnameseSerperAPI:
                 prefer_vietnamese=True
             )
         
-        # Use base API to execute search
         return self.base_api.run(query, k=k or self.k)
 

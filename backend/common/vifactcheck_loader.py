@@ -1,4 +1,3 @@
-# common/vifactcheck_loader.py
 """
 Load and process ViFactCheck dataset from HuggingFace.
 Dataset: https://huggingface.co/datasets/tranthaihoa/vifactcheck
@@ -35,9 +34,8 @@ class ViFactCheckLoader:
         Returns:
             Dataset object or DatasetDict
         """
-        # Check if already loaded in memory
         if self.dataset is not None:
-            print(f"✅ Using cached dataset from memory")
+            print(f"Using cached dataset from memory")
             return self.dataset
 
         print(f"📥 Loading ViFactCheck dataset from HuggingFace...")
@@ -49,14 +47,14 @@ class ViFactCheckLoader:
                     split=split,
                     cache_dir=str(self.cache_dir)
                 )
-                print(f"✅ Loaded {len(self.dataset)} samples from '{split}' split")
+                print(f"Loaded {len(self.dataset)} samples from '{split}' split")
             else:
                 self.dataset = load_dataset(
                     "tranthaihoa/vifactcheck",
                     cache_dir=str(self.cache_dir)
                 )
                 total = sum(len(self.dataset[key]) for key in self.dataset.keys())
-                print(f"✅ Loaded {total} total samples across all splits")
+                print(f"Loaded {total} total samples across all splits")
 
             return self.dataset
 
@@ -110,26 +108,37 @@ class ViFactCheckLoader:
 
         converted = []
         for sample in dataset_split:
-            # Map ViFactCheck labels to FIRE format
-            label_map = {
-                'supported': 'True',
-                'refuted': 'False',
-                'nei': 'Uncertain',
-                'not enough info': 'Uncertain',
-            }
-
+            label_value = sample.get('label', '')
+            
+            if isinstance(label_value, int):
+                label_map = {
+                    0: 'True',
+                    1: 'False',
+                    2: 'Not Enough Info',
+                }
+            else:
+                label_map = {
+                    'support': 'True',
+                    'supported': 'True',
+                    'refute': 'False',
+                    'refuted': 'False',
+                    'nei': 'Not Enough Info',
+                    'not enough info': 'Not Enough Info',
+                    'not enough information': 'Not Enough Info',
+                }
+            
             fire_sample = {
                 'claim': sample.get('claim', sample.get('text', '')),
-                'label': label_map.get(sample.get('label', '').lower(), sample.get('label', '')),
+                'label': label_map.get(label_value if isinstance(label_value, int) else label_value.lower(), 'Not Enough Info'),
                 'evidence': sample.get('evidence', ''),
                 'metadata': {
                     'source': sample.get('source', ''),
                     'domain': sample.get('domain', ''),
+                    'original_label': label_value,
                 }
             }
             converted.append(fire_sample)
 
-        # Save to JSONL if path provided
         if output_path:
             output_file = Path(output_path)
             output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +147,7 @@ class ViFactCheckLoader:
                 for sample in converted:
                     f.write(json.dumps(sample, ensure_ascii=False) + '\n')
 
-            print(f"✅ Converted {len(converted)} samples to {output_path}")
+            print(f"Converted {len(converted)} samples to {output_path}")
 
         return converted
 
@@ -158,7 +167,6 @@ class ViFactCheckLoader:
         if split:
             data = self.dataset[split] if isinstance(self.dataset, dict) else self.dataset
 
-            # Calculate statistics
             labels = [item.get('label', '') for item in data]
             claims = [item.get('claim', item.get('text', '')) for item in data]
 
@@ -195,25 +203,19 @@ class ViFactCheckLoader:
         print("=" * 80)
 
 
-# Create global instance for easy import
 loader = ViFactCheckLoader()
 
 
-# Usage example
 if __name__ == "__main__":
-    # Load dataset
     loader = ViFactCheckLoader()
     dataset = loader.load_dataset()
 
-    # Print statistics
     stats = loader.get_statistics()
     print("\n📊 Dataset Statistics:")
     print(json.dumps(stats, indent=2, ensure_ascii=False))
 
-    # Print sample claims
     loader.print_sample_claims(n=3)
 
-    # Convert to FIRE format
     loader.convert_to_fire_format(
         output_path="datasets/vifactcheck/data.jsonl",
         split="test"
