@@ -147,9 +147,13 @@ async def check_fact(request: FactCheckRequest):
                     )
                     
                     result_text = search.get('result', '')
-                    import re
-                    url_match = re.search(r'https?://[^\s]+', result_text)
-                    source_url = url_match.group(0) if url_match else f"https://google.com/search?q={search.get('query', '')}"
+                    
+                    # Use direct link from search result if available, otherwise try to extract from text
+                    source_url = search.get('link', '')
+                    if not source_url:
+                        import re
+                        url_match = re.search(r'https?://[^\s]+', result_text)
+                        source_url = url_match.group(0) if url_match else f"https://google.com/search?q={search.get('query', '')}"
                     
                     # Extract title more intelligently
                     title = None

@@ -99,6 +99,7 @@ STATEMENT:
 class GoogleSearchResult:
     query: str
     result: str
+    link: str = ''
 
 
 @dataclasses.dataclass()
@@ -114,17 +115,18 @@ def call_search(
         serper_api_key: str = shared_config.serper_api_key,
         search_postamble: str = '',
         atomic_claim: str = '',
-) -> str:
+        with_links: bool = False,
+) -> str | list:
     """Call Google Search to get the search result with Vietnamese enhancements."""
     
     if VIETNAMESE_SUPPORT and atomic_claim:
         cached = fact_check_db.get_cached_search(search_query)
-        if cached:
+        if cached and not with_links:
             return cached
     
     if VIETNAMESE_SUPPORT:
         is_dup, similarity = query_deduplicator.check_and_add(search_query)
-        if is_dup:
+        if is_dup and not with_links:
             return "[Duplicate query - skipped to reduce API costs]"
     
     if VIETNAMESE_SUPPORT:
@@ -139,15 +141,25 @@ def call_search(
     if search_type == 'serper':
         if VIETNAMESE_SUPPORT and hasattr(query_serper, 'VietnameseSerperAPI'):
             serper_searcher = query_serper.VietnameseSerperAPI(serper_api_key, k=num_searches)
+            
+            if with_links:
+                return serper_searcher.get_results_with_links(search_query, claim=atomic_claim, k=num_searches)
+            else:
+                result = serper_searcher.run(search_query, claim=atomic_claim, k=num_searches)
+                if atomic_claim:
+                    fact_check_db.cache_search(search_query, result)
+                return result
         else:
             serper_searcher = query_serper.SerperAPI(serper_api_key, k=num_searches)
-        
-        result = serper_searcher.run(search_query, k=num_searches)
-        
-        if VIETNAMESE_SUPPORT and atomic_claim:
-            fact_check_db.cache_search(search_query, result)
-        
-        return result
+            
+            if with_links:
+                raw_results = serper_searcher._google_serper_api_results(search_query, search_type='search', num=num_searches)
+                return serper_searcher._parse_results_with_links(raw_results)
+            else:
+                result = serper_searcher.run(search_query, k=num_searches)
+                if VIETNAMESE_SUPPORT and atomic_claim:
+                    fact_check_db.cache_search(search_query, result)
+                return result
     else:
         raise ValueError(f'Unsupported search type: {search_type}')
 
@@ -216,7 +228,14 @@ def final_answer_or_next_search(
             return '_Early_Stop', usage
 
         search_result = call_search(answer_or_next_query['search_query'], atomic_claim=atomic_claim)
-        return GoogleSearchResult(query=answer_or_next_query['search_query'], result=search_result), usage
+        search_results_with_links = call_search(answer_or_next_query['search_query'], atomic_claim=atomic_claim, with_links=True)
+        
+        # Extract link from first result if available
+        link = ''
+        if isinstance(search_results_with_links, list) and len(search_results_with_links) > 0:
+            link = search_results_with_links[0].get('link', '')
+        
+        return GoogleSearchResult(query=answer_or_next_query['search_query'], result=search_result, link=link), usage
     else:
         print(f"Unexpected output: {answer_or_next_query}")
         return None, None
@@ -323,7 +342,13 @@ def verify_atomic_claim(
                 default_query = f"{atomic_claim} hiện nay 2024"
                 print(f"Auto-generated query: {default_query}")
                 search_result_text = call_search(default_query, atomic_claim=atomic_claim)
-                search_results.append(GoogleSearchResult(query=default_query, result=search_result_text))
+                search_results_with_links = call_search(default_query, atomic_claim=atomic_claim, with_links=True)
+                
+                link = ''
+                if isinstance(search_results_with_links, list) and len(search_results_with_links) > 0:
+                    link = search_results_with_links[0].get('link', '')
+                
+                search_results.append(GoogleSearchResult(query=default_query, result=search_result_text, link=link))
                 continue
             
             if VIETNAMESE_SUPPORT:
