@@ -7,3 +7,14 @@ __init__.py
 .env
 *.env
 !.env.example
+
+# ignore all md file except agents.md and README.md
+*.md
+!AGENTS.md
+!README.md
+
+#DB
+*.db
+
+#ignore all file start test_
+test_*.py

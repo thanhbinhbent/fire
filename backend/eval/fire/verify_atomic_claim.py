@@ -13,6 +13,18 @@ from eval.fire import query_serper
 from eval.fire.query_serper import SerperAPI
 from sentence_transformers import SentenceTransformer, util
 
+# Vietnamese components - graceful fallback if not available
+try:
+    from common.vietnamese_utils import preprocessor
+    from common.query_deduplication import deduplicator as query_deduplicator
+    from common.evidence_validator import validator as evidence_validator
+    from common.confidence import calibrator as confidence_calibrator
+    from common.database import db as fact_check_db
+    VIETNAMESE_SUPPORT = True
+except ImportError as e:
+    print(f"Vietnamese components not available: {e}")
+    VIETNAMESE_SUPPORT = False
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 sbert_model = SentenceTransformer('all-MiniLM-L6-v2').to(device)
 _Factual_LABEL = 'True'
@@ -88,13 +100,47 @@ def call_search(
         num_searches: int = fire_config.num_searches,
         serper_api_key: str = shared_config.serper_api_key,
         search_postamble: str = '',  # ex: 'site:https://en.wikipedia.org'
+        atomic_claim: str = '',  # for Vietnamese enhancement and caching
 ) -> str:
-    """Call Google Search to get the search result."""
+    """Call Google Search to get the search result with Vietnamese enhancements."""
+    
+    # Vietnamese Enhancement 1: Check cache first
+    if VIETNAMESE_SUPPORT and atomic_claim:
+        cached = fact_check_db.get_cached_search(search_query)
+        if cached:
+            return cached
+    
+    # Vietnamese Enhancement 2: Query deduplication check
+    if VIETNAMESE_SUPPORT:
+        is_dup, similarity = query_deduplicator.check_and_add(search_query)
+        if is_dup:
+            print(f"⚠️ Skipping duplicate query (similarity={similarity:.2f}): {search_query[:50]}...")
+            return "[Duplicate query - skipped to reduce API costs]"
+    
+    # Vietnamese Enhancement 3: Enhance query for Vietnamese search
+    if VIETNAMESE_SUPPORT:
+        try:
+            enhanced_query = query_serper.enhance_vietnamese_query(search_query)
+            search_query = enhanced_query
+        except Exception as e:
+            print(f"Query enhancement failed, using original: {e}")
+    
     search_query += f' {search_postamble}' if search_postamble else ''
 
     if search_type == 'serper':
-        serper_searcher = query_serper.SerperAPI(serper_api_key, k=num_searches)
-        return serper_searcher.run(search_query, k=num_searches)
+        # Use Vietnamese-aware Serper API if available
+        if VIETNAMESE_SUPPORT and hasattr(query_serper, 'VietnameseSerperAPI'):
+            serper_searcher = query_serper.VietnameseSerperAPI(serper_api_key, k=num_searches)
+        else:
+            serper_searcher = query_serper.SerperAPI(serper_api_key, k=num_searches)
+        
+        result = serper_searcher.run(search_query, k=num_searches)
+        
+        # Vietnamese Enhancement 4: Cache the result
+        if VIETNAMESE_SUPPORT and atomic_claim:
+            fact_check_db.cache_search(search_query, result)
+        
+        return result
     else:
         raise ValueError(f'Unsupported search type: {search_type}')
 
@@ -162,7 +208,9 @@ def final_answer_or_next_search(
                                                                     threshold=0.9) >= tolerance - 1:
             return '_Early_Stop', usage
 
-        return GoogleSearchResult(query=answer_or_next_query['search_query'], result=call_search(answer_or_next_query['search_query'])), usage
+        # Pass atomic_claim for Vietnamese enhancements
+        search_result = call_search(answer_or_next_query['search_query'], atomic_claim=atomic_claim)
+        return GoogleSearchResult(query=answer_or_next_query['search_query'], result=search_result), usage
     else:
         print(f"Unexpected output: {answer_or_next_query}")
         return None, None
@@ -226,6 +274,16 @@ def verify_atomic_claim(
     :param max_retries: The maximum tryouts for the LLM call for each step
     :return: FinalAnswer or None, search results, usage of tokens for verifying one atomic claim.
     '''
+    
+    # Vietnamese Enhancement: Preprocess the claim
+    preprocessed_claim = atomic_claim
+    if VIETNAMESE_SUPPORT:
+        try:
+            preprocessed_claim = preprocessor.preprocess_claim(atomic_claim)
+            print(f"📝 Preprocessed claim: {preprocessed_claim[:100]}...")
+        except Exception as e:
+            print(f"Preprocessing failed, using original claim: {e}")
+    
     search_results = []
     total_usage = {
         'input_tokens': 0,
@@ -253,6 +311,58 @@ def verify_atomic_claim(
         elif isinstance(answer_or_next_search, GoogleSearchResult):
             search_results.append(answer_or_next_search)
         elif isinstance(answer_or_next_search, FinalAnswer):
+            # Vietnamese Enhancement: Validate evidence and calculate confidence
+            if VIETNAMESE_SUPPORT:
+                try:
+                    # Calculate evidence quality score
+                    evidence_scores = []
+                    for search in search_results:
+                        validation = evidence_validator.validate_evidence(
+                            evidence_text=search.result,
+                            source_url=search.query,  # Use query as proxy for source
+                            claim=preprocessed_claim
+                        )
+                        evidence_scores.append(validation['overall_score'])
+                    
+                    avg_evidence_quality = sum(evidence_scores) / len(evidence_scores) if evidence_scores else 0.5
+                    
+                    # Calculate confidence
+                    confidence = confidence_calibrator.calculate_confidence(
+                        verdict=answer_or_next_search.answer,
+                        iterations=len(search_results),
+                        max_iterations=max_steps,
+                        claim_length=len(preprocessed_claim.split()),
+                        evidence_count=len(search_results),
+                        evidence_quality=avg_evidence_quality
+                    )
+                    
+                    is_confident = confidence_calibrator.is_confident(
+                        confidence,
+                        claim_complexity=len(preprocessed_claim.split())
+                    )
+                    
+                    # Get Vietnamese verdict label
+                    verdict_label = confidence_calibrator.get_verdict_label(
+                        answer_or_next_search.answer,
+                        confidence
+                    )
+                    
+                    # Save to database
+                    fact_check_db.save_verification(
+                        claim=atomic_claim,
+                        verdict=answer_or_next_search.answer,
+                        confidence=confidence,
+                        reasoning=answer_or_next_search.response,
+                        model=rater.__class__.__name__ if hasattr(rater, '__class__') else 'unknown',
+                        searches=[{'query': s.query, 'result': s.result} for s in search_results]
+                    )
+                    
+                    print(f"✅ Confidence: {confidence:.3f}, Is confident: {is_confident}")
+                    print(f"🏷️ Verdict: {verdict_label}")
+                    
+                except Exception as e:
+                    print(f"Vietnamese enhancements failed: {e}")
+            
             search_dicts = {
                 'google_searches': [dataclasses.asdict(s) for s in search_results]
             }
@@ -262,10 +372,52 @@ def verify_atomic_claim(
     final_answer, num_tries = None, 0
     while not final_answer and num_tries <= max_retries:
         num_tries += 1
-        final_answer, usage = must_get_final_answer(atomic_claim, searches=search_results, model=rater)
+        final_answer, usage = must_get_final_answer(preprocessed_claim, searches=search_results, model=rater)
         if usage is not None:
             total_usage['input_tokens'] += usage['input_tokens']
             total_usage['output_tokens'] += usage['output_tokens']
+    
+    # Vietnamese Enhancement: Apply confidence and evidence validation to final answer
+    if VIETNAMESE_SUPPORT and final_answer:
+        try:
+            evidence_scores = []
+            for search in search_results:
+                validation = evidence_validator.validate_evidence(
+                    evidence_text=search.result,
+                    source_url=search.query,
+                    claim=preprocessed_claim
+                )
+                evidence_scores.append(validation['overall_score'])
+            
+            avg_evidence_quality = sum(evidence_scores) / len(evidence_scores) if evidence_scores else 0.5
+            confidence = confidence_calibrator.calculate_confidence(
+                verdict=final_answer.answer,
+                iterations=len(search_results),
+                max_iterations=max_steps,
+                claim_length=len(preprocessed_claim.split()),
+                evidence_count=len(search_results),
+                evidence_quality=avg_evidence_quality
+            )
+            
+            verdict_label = confidence_calibrator.get_verdict_label(
+                final_answer.answer,
+                confidence
+            )
+            
+            fact_check_db.save_verification(
+                claim=atomic_claim,
+                verdict=final_answer.answer,
+                confidence=confidence,
+                reasoning=final_answer.response if hasattr(final_answer, 'response') else '',
+                model=rater.__class__.__name__ if hasattr(rater, '__class__') else 'unknown',
+                searches=[{'query': s.query, 'result': s.result} for s in search_results]
+            )
+            
+            print(f"✅ Final Confidence: {confidence:.3f}")
+            print(f"🏷️ Final Verdict: {verdict_label}")
+        except Exception as e:
+            print(f"Vietnamese final enhancements failed: {e}")
+    
     search_dicts = {
         'google_searches': [dataclasses.asdict(s) for s in search_results]
     }

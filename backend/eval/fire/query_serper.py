@@ -1,13 +1,21 @@
-"""Class for querying the Google Serper API."""
+"""Class for querying the Google Serper API with Vietnamese enhancements."""
 
 import random
 import time
-from typing import Any, Optional, Literal
+from typing import Any, Optional, Literal, List, Dict
 
 import requests
 
 _SERPER_URL = 'https://google.serper.dev'
 NO_RESULT_MSG = 'No good Google Search result was found'
+
+# Vietnamese-specific imports
+try:
+    from common.vietnamese_utils import preprocessor
+    VIETNAMESE_SUPPORT = True
+except ImportError:
+    VIETNAMESE_SUPPORT = False
+    print("⚠️ Vietnamese utilities not available")
 
 
 class SerperAPI:
@@ -138,3 +146,103 @@ class SerperAPI:
 
   def _parse_results(self, results: dict[Any, Any]) -> str:
     return ' '.join(self._parse_snippets(results))
+
+
+def enhance_vietnamese_query(
+    query: str,
+    claim: Optional[str] = None,
+    prefer_vietnamese: bool = True
+) -> str:
+    """
+    Enhance search query for Vietnamese content with entity extraction.
+    
+    VIETNAMESE-AWARE ENHANCEMENTS:
+    1. Add Vietnamese site filters (trusted news sources)
+    2. Extract and emphasize key entities from claim
+    3. Add language-specific search operators
+    
+    Args:
+        query: Original search query
+        claim: Original claim (optional, for entity extraction)
+        prefer_vietnamese: If True, add Vietnamese site filters
+    
+    Returns:
+        Enhanced query string
+    """
+    enhanced = query
+    
+    # Extract entities from claim for better targeting
+    if claim and prefer_vietnamese and VIETNAMESE_SUPPORT:
+        try:
+            processed = preprocessor.preprocess_claim(claim)
+            entities = [e['text'] for e in processed['entities']]
+            
+            # Add key entities to query if not already present
+            for entity in entities[:3]:  # Top 3 entities
+                if entity.lower() not in query.lower():
+                    enhanced = f"{enhanced} {entity}"
+        except Exception as e:
+            print(f"⚠️ Entity extraction failed: {e}")
+    
+    if prefer_vietnamese:
+        # Tier-based Vietnamese news sources (prioritize by credibility)
+        tier1_sources = ["vnexpress.net", "tuoitre.vn", "thanhnien.vn"]
+        tier2_sources = ["vietnamnet.vn", "dantri.com.vn", "baochinhphu.vn"]
+        
+        # Prioritize tier 1 sources
+        site_filter = " OR ".join([f"site:{source}" for source in tier1_sources + tier2_sources])
+        enhanced = f"({enhanced}) ({site_filter})"
+    
+    return enhanced
+
+
+class VietnameseSerperAPI:
+    """
+    Extended SerperAPI with Vietnamese language support.
+    Wraps Serper API with Vietnamese-specific enhancements.
+    """
+    
+    def __init__(self, serper_api_key: str, k: int = 3, prefer_vietnamese: bool = True):
+        """
+        Initialize Vietnamese-aware search API.
+        
+        Args:
+            serper_api_key: Serper API key
+            k: Number of results to return
+            prefer_vietnamese: Enable Vietnamese site filtering
+        """
+        self.serper_api_key = serper_api_key
+        self.k = k
+        self.prefer_vietnamese = prefer_vietnamese
+        
+        # Create base SerperAPI instance
+        self.base_api = SerperAPI(
+            serper_api_key=serper_api_key,
+            gl='vn',  # Vietnam geolocation
+            hl='vi',  # Vietnamese language
+            k=k
+        )
+    
+    def run(self, query: str, claim: Optional[str] = None, k: Optional[int] = None) -> str:
+        """
+        Run search with Vietnamese enhancements.
+        
+        Args:
+            query: Search query
+            claim: Original claim (for entity extraction)
+            k: Number of results
+        
+        Returns:
+            str: Search results as formatted string
+        """
+        # Enhance query for Vietnamese content
+        if self.prefer_vietnamese:
+            query = enhance_vietnamese_query(
+                query,
+                claim=claim,
+                prefer_vietnamese=True
+            )
+        
+        # Use base API to execute search
+        return self.base_api.run(query, k=k or self.k)
+
