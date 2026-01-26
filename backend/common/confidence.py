@@ -43,19 +43,21 @@ class ConfidenceCalibrator:
         Returns:
             float: Confidence score between 0 and 1
         """
+        # Improved base scores: higher for clear verdicts, lower for NEI
         base_scores = {
-            "TRUE": 0.75,
-            "FALSE": 0.75,
-            "NOT ENOUGH INFO": 0.4,
-            "SUPPORTS": 0.75,
-            "REFUTES": 0.75,
-            "SUPPORTED": 0.75,
-            "REFUTED": 0.75,
+            "TRUE": 0.80,  # Increased from 0.75
+            "FALSE": 0.80,  # Increased from 0.75
+            "NOT ENOUGH INFO": 0.35,  # Decreased from 0.4 (less confident)
+            "SUPPORTS": 0.80,
+            "REFUTES": 0.80,
+            "SUPPORTED": 0.80,
+            "REFUTED": 0.80,
         }
         confidence = base_scores.get(verdict.upper(), 0.5)
 
+        # Reduced iteration penalty - more searches = better evidence gathering
         iteration_ratio = iterations / max(max_iterations, 1)
-        iteration_penalty = iteration_ratio * 0.2
+        iteration_penalty = iteration_ratio * 0.1  # Reduced from 0.2
         confidence -= iteration_penalty
 
         complexity_factor = min(claim_length / 100, 1.0)

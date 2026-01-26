@@ -190,12 +190,33 @@ def enhance_vietnamese_query(
         except Exception as e:
             print(f"Entity extraction failed: {e}")
     
+    # Use semantic analysis instead of hardcoded keywords
+    # Only add Vietnamese site filter for Vietnamese-related queries
     if prefer_vietnamese:
-        tier1_sources = ["vnexpress.net", "tuoitre.vn", "thanhnien.vn"]
-        tier2_sources = ["vietnamnet.vn", "dantri.com.vn", "baochinhphu.vn"]
-        
-        site_filter = " OR ".join([f"site:{source}" for source in tier1_sources + tier2_sources])
-        enhanced = f"({enhanced}) ({site_filter})"
+        try:
+            from common.claim_analyzer import get_analyzer
+            analyzer = get_analyzer()
+            
+            # Let LLM decide if should use Vietnamese sources
+            should_use_vn_sources = analyzer.should_use_vietnamese_sources(claim if claim else query)
+            
+            if should_use_vn_sources:
+                tier1_sources = ["vnexpress.net", "tuoitre.vn", "thanhnien.vn"]
+                tier2_sources = ["vietnamnet.vn", "dantri.com.vn", "baochinhphu.vn"]
+                
+                site_filter = " OR ".join([f"site:{source}" for source in tier1_sources + tier2_sources])
+                enhanced = f"({enhanced}) ({site_filter})"
+        except Exception as e:
+            # Fallback to simple check if analyzer fails
+            vietnamese_keywords = ['việt nam', 'viet nam', 'việt', 'chính phủ', 'quốc hội', 'tổng bí thư', 'chủ tịch']
+            is_vietnamese_query = any(kw in query.lower() for kw in vietnamese_keywords) or (claim and any(kw in claim.lower() for kw in vietnamese_keywords))
+            
+            if is_vietnamese_query:
+                tier1_sources = ["vnexpress.net", "tuoitre.vn", "thanhnien.vn"]
+                tier2_sources = ["vietnamnet.vn", "dantri.com.vn", "baochinhphu.vn"]
+                
+                site_filter = " OR ".join([f"site:{source}" for source in tier1_sources + tier2_sources])
+                enhanced = f"({enhanced}) ({site_filter})"
     
     return enhanced
 

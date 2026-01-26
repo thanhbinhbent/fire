@@ -19,6 +19,7 @@ try:
     from common.evidence_validator import validator as evidence_validator
     from common.confidence import calibrator as confidence_calibrator
     from common.database import db as fact_check_db
+    from common.claim_analyzer import get_analyzer
     from common.prompts import (
         FACTUAL_LABEL,
         NON_FACTUAL_LABEL,
@@ -144,20 +145,30 @@ def final_answer_or_next_search(
 
     # Sort searches by temporal relevance for current claims
     if VIETNAMESE_SUPPORT and past_searches:
-        sorted_searches = []
-        for search in past_searches:
-            validation = evidence_validator.validate_evidence(
-                evidence_text=search.result,
-                source_url=search.link if hasattr(search, 'link') and search.link else search.query,
-                claim=atomic_claim
-            )
-            search.validation = validation
-            sorted_searches.append((search, validation.get('temporal_score', 0.5)))
+        # Check if current claim using pre-computed analysis if available
+        # This is passed via global/closure or re-computed lightweight
+        try:
+            analyzer = get_analyzer()
+            # Try to get from cache first (very fast)
+            analysis = analyzer.analyze_claim(atomic_claim)
+            is_current_claim = analysis.get('temporal_sensitivity') == 'high'
+        except:
+            # Fallback to simple check
+            is_current_claim = any(keyword in atomic_claim.lower() for keyword in 
+                                   ["hiện nay", "hiện tại", "now", "current", "bây giờ", "hôm nay"])
         
-        # Sort by temporal score (most recent first) for current claims
-        is_current_claim = any(keyword in atomic_claim.lower() for keyword in 
-                               ["hiện nay", "hiện tại", "now", "current", "bây giờ", "hôm nay"])
         if is_current_claim:
+            sorted_searches = []
+            for search in past_searches:
+                validation = evidence_validator.validate_evidence(
+                    evidence_text=search.result,
+                    source_url=search.link if hasattr(search, 'link') and search.link else search.query,
+                    claim=atomic_claim
+                )
+                search.validation = validation
+                sorted_searches.append((search, validation.get('temporal_score', 0.5)))
+            
+            # Sort by temporal score (most recent first) for current claims
             past_searches = [s[0] for s in sorted(sorted_searches, key=lambda x: x[1], reverse=True)]
     
     # Format knowledge with date metadata
@@ -226,19 +237,25 @@ def must_get_final_answer(
     
     # Sort searches by temporal relevance for current claims
     if VIETNAMESE_SUPPORT and searches:
-        sorted_searches = []
-        for search in searches:
-            validation = evidence_validator.validate_evidence(
-                evidence_text=search.result,
-                source_url=search.link if hasattr(search, 'link') and search.link else search.query,
-                claim=atomic_fact
-            )
-            sorted_searches.append((search, validation.get('temporal_score', 0.5), validation))
+        # Use analyzer for consistency
+        try:
+            analyzer = get_analyzer()
+            analysis = analyzer.analyze_claim(atomic_fact)
+            is_current_claim = analysis.get('temporal_sensitivity') == 'high'
+        except:
+            # Fallback
+            is_current_claim = any(keyword in atomic_fact.lower() for keyword in 
+                                   ["hiện nay", "hiện tại", "now", "current", "bây giờ", "hôm nay"])
         
-        # Sort by temporal score (most recent first) for current claims
-        is_current_claim = any(keyword in atomic_fact.lower() for keyword in 
-                               ["hiện nay", "hiện tại", "now", "current", "bây giờ", "hôm nay"])
         if is_current_claim:
+            sorted_searches = []
+            for search in searches:
+                validation = evidence_validator.validate_evidence(
+                    evidence_text=search.result,
+                    source_url=search.link if hasattr(search, 'link') and search.link else search.query,
+                    claim=atomic_fact
+                )
+                sorted_searches.append((search, validation.get('temporal_score', 0.5), validation))
             sorted_searches = sorted(sorted_searches, key=lambda x: x[1], reverse=True)
             searches = [s[0] for s in sorted_searches]
             
@@ -297,6 +314,16 @@ def verify_atomic_claim(
     :return: FinalAnswer or None, search results, usage of tokens for verifying one atomic claim.
     '''
     
+    # Analyze claim once at the beginning (cache for reuse)
+    claim_analysis = None
+    if VIETNAMESE_SUPPORT:
+        try:
+            analyzer = get_analyzer(rater)
+            claim_analysis = analyzer.analyze_claim(atomic_claim, model=rater)
+            print(f"Claim analysis: {claim_analysis.get('claim_type')}, sensitivity: {claim_analysis.get('temporal_sensitivity')}")
+        except Exception as e:
+            print(f"Claim analysis failed: {e}, will use fallback")
+    
     preprocessed_claim = atomic_claim
     if VIETNAMESE_SUPPORT:
         try:
@@ -317,7 +344,8 @@ def verify_atomic_claim(
     }
 
     stop_search = False
-    min_searches = 1
+    # Increased from 1 to 2 for better accuracy - require at least 2 evidence sources
+    min_searches = 2
     
     for step in range(max_steps):
         answer_or_next_search, num_tries = None, 0
@@ -341,10 +369,49 @@ def verify_atomic_claim(
         elif isinstance(answer_or_next_search, FinalAnswer):
             if len(search_results) < min_searches:
                 print(f"LLM tried to answer without search. Forcing search... (Step {step+1}/{max_steps})")
-                from datetime import datetime
-                current_year = datetime.now().year
-                default_query = f"{atomic_claim} hiện nay {current_year}"
-                print(f"Auto-generated query: {default_query}")
+                
+                # Use pre-analyzed claim data (already computed)
+                if VIETNAMESE_SUPPORT and claim_analysis:
+                    try:
+                        # Use LLM-suggested query (more intelligent)
+                        default_query = claim_analysis.get('suggested_query', '')
+                        
+                        # Add temporal context if needed
+                        if claim_analysis.get('requires_recent_info'):
+                            from datetime import datetime
+                            current_year = datetime.now().year
+                            default_query = f"{default_query} {current_year}"
+                        elif claim_analysis.get('has_specific_date'):
+                            # For date-specific claims, add "khi nào" or "ngày bầu"
+                            import re
+                            year_match = re.search(r'\b(19|20)\d{2}\b', atomic_claim)
+                            if year_match:
+                                default_query = f"{default_query} ngày bầu {year_match.group()}"
+                            else:
+                                default_query = f"{default_query} khi nào"
+                        
+                        print(f"Auto-generated query (LLM-analyzed): {default_query}")
+                    except Exception as e:
+                        print(f"Using fallback query: {e}")
+                        # Fallback to simple entity extraction
+                        try:
+                            processed = preprocessor.preprocess_claim(atomic_claim)
+                            entities = [e['text'] for e in processed.get('entities', [])[:3]]
+                            default_query = ' '.join(entities) if entities else ' '.join(atomic_claim.split()[:6])
+                        except:
+                            default_query = ' '.join(atomic_claim.split()[:6])
+                elif VIETNAMESE_SUPPORT:
+                    # No claim_analysis, use fallback
+                    try:
+                        processed = preprocessor.preprocess_claim(atomic_claim)
+                        entities = [e['text'] for e in processed.get('entities', [])[:3]]
+                        default_query = ' '.join(entities) if entities else ' '.join(atomic_claim.split()[:6])
+                    except:
+                        default_query = ' '.join(atomic_claim.split()[:6])
+                else:
+                    # Non-Vietnamese: simple extraction
+                    default_query = ' '.join(atomic_claim.split()[:6])
+                
                 search_result_text = call_search(default_query, atomic_claim=atomic_claim)
                 link = call_search(default_query, atomic_claim=atomic_claim, with_links=True)
                 

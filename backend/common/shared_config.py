@@ -22,3 +22,7 @@ base_url = os.getenv('BASE_URL', '')
 random_seed = int(os.getenv('RANDOM_SEED', '1'))
 
 litellm_log = os.getenv('LITELLM_LOG', '')
+# Semantic model and optimization settings
+SEMANTIC_MODEL_CACHE = True
+SEMANTIC_MODEL_NAME = os.getenv('SEMANTIC_MODEL_NAME', 'paraphrase-multilingual-MiniLM-L12-v2')
+QUERY_DEDUP_THRESHOLD = float(os.getenv('QUERY_DEDUP_THRESHOLD', '0.85'))

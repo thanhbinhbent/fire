@@ -11,12 +11,12 @@ class QueryDeduplicator:
     Prevents wasting API calls on semantically similar searches.
     """
 
-    def __init__(self, model_name: str = "vinai/phobert-base-v2", threshold: float = 0.85):
+    def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", threshold: float = 0.85):
         """
-        Initialize deduplicator with PhoBERT model.
+        Initialize deduplicator with lightweight multilingual model.
 
         Args:
-            model_name: HuggingFace model for Vietnamese embeddings
+            model_name: HuggingFace model for Vietnamese embeddings (default: lightweight multilingual)
             threshold: Cosine similarity threshold (0-1) for duplicates
         """
         self.threshold = threshold
@@ -27,31 +27,32 @@ class QueryDeduplicator:
         self.model = None
         
         self._model_loaded = False
+        self._use_sentence_transformers = True
 
     def _load_model(self):
-        """Load PhoBERT model lazily."""
+        """Load sentence transformer model lazily (faster than PhoBERT)."""
         if self._model_loaded:
             return
         
         try:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModel.from_pretrained(self.model_name)
-            self.model.eval()
-            
-            if torch.cuda.is_available():
-                self.model = self.model.cuda()
-            else:
-                self.model = self.model.cpu()
-            
+            # Try sentence-transformers first (much faster)
+            from sentence_transformers import SentenceTransformer
+            self.model = SentenceTransformer(self.model_name)
+            self._use_sentence_transformers = True
             self._model_loaded = True
+            print(f"Loaded lightweight model: {self.model_name}")
+            return
         except Exception as e:
-            print(f"Could not load PhoBERT model: {e}")
-            print("Falling back to simple string matching")
-            self._model_loaded = False
+            print(f"Could not load sentence-transformers: {e}")
+        
+        # Fallback to simple string matching
+        print("Using simple string matching for query deduplication")
+        self._model_loaded = False
+        self._use_sentence_transformers = False
 
     def _get_embedding(self, text: str) -> np.ndarray:
         """
-        Get sentence embedding for text.
+        Get sentence embedding for text using sentence-transformers (faster than PhoBERT).
 
         Args:
             text: Input text
@@ -62,25 +63,17 @@ class QueryDeduplicator:
         self._load_model()
         
         if not self._model_loaded:
+            # Simple hash-based fallback
             return np.array([hash(text) % 10000])
         
         try:
-            inputs = self.tokenizer(
-                text,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=256
-            )
-            
-            if torch.cuda.is_available() and next(self.model.parameters()).is_cuda:
-                inputs = {k: v.cuda() for k, v in inputs.items()}
-
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-
-            embedding = outputs.last_hidden_state[:, 0, :].squeeze().cpu().numpy()
-            return embedding
+            if self._use_sentence_transformers:
+                # Much faster than PhoBERT
+                embedding = self.model.encode(text, convert_to_tensor=False)
+                return embedding
+            else:
+                # Should not reach here
+                return np.array([hash(text) % 10000])
         except Exception as e:
             print(f"Embedding error: {e}")
             return np.array([hash(text) % 10000])

@@ -24,11 +24,19 @@ FACT_CHECK_SYSTEM_PROMPT = 'You are a fact-checking agent responsible for verify
 FINAL_ANSWER_OR_NEXT_SEARCH_PROMPT = f"""\
 Instructions:
 1. You are provided with a STATEMENT and relevant KNOWLEDGE points from web search.
-2. **CRITICAL RULE: You MUST ONLY use information from the KNOWLEDGE provided. DO NOT use your internal training knowledge, especially for:**
-   - Current events, positions, or facts ("hiện nay", "hiện tại", "now", "current")
-   - Political positions, leadership roles, or appointments
-   - Recent events or changes in status
-   - Any facts that could have changed over time
+2. **WHEN TO USE KNOWLEDGE vs INTERNAL TRAINING:**
+   a) **Basic Facts (geography, history, science):** If KNOWLEDGE is empty or doesn't address the claim, you CAN use internal knowledge
+      - Example: "Hà Nội là thủ đô Việt Nam" - well-known geographic fact
+      - Example: "Việt Nam thống nhất năm 1975" - historical fact
+   
+   b) **Current Events ("hiện nay", "current"):** You MUST ONLY use KNOWLEDGE, NOT internal training
+      - Political positions, leadership roles (may have changed)
+      - Recent appointments or elections
+      - Any facts that could have changed recently
+   
+   c) **When KNOWLEDGE contradicts your internal knowledge:**
+      - If KNOWLEDGE is from trusted sources → TRUST KNOWLEDGE over your training
+      - If KNOWLEDGE seems unreliable → State "Not Enough Info"
 3. **TEMPORAL REASONING:**
    - **FIRST: Carefully extract ALL dates mentioned in KNOWLEDGE (ngày X/Y, tháng Z năm YYYY)**
    - **Pay special attention to year (năm) - if "ngày 20/1" appears, look for "năm 2025" or "năm 2026" in the same text**
@@ -39,12 +47,22 @@ Instructions:
    - If KNOWLEDGE is empty or insufficient → Issue search query
    - If KNOWLEDGE directly contradicts your internal knowledge → Trust KNOWLEDGE, not your training data
    - If KNOWLEDGE clearly supports/refutes the claim → Make final decision
-5. First, provide your reasoning in Vietnamese (tiếng Việt):
-   - **IMPORTANT: First sentence must identify and extract the exact year from the evidence (e.g., "Theo nguồn, sự kiện xảy ra vào ngày 20/1 năm 2025")**
-   - Identify and quote relevant dates from KNOWLEDGE with FULL year information
-   - Compare temporal information if there are conflicts
-   - Explain which source is most recent and why you trust it
-   - Write 2-3 clear paragraphs explaining your analysis
+5. **CHAIN-OF-THOUGHT REASONING** - First, provide your step-by-step reasoning in Vietnamese:
+   Step 1 - EXTRACT TEMPORAL INFO:
+   - **CRITICAL: Scan ENTIRE knowledge text and extract ALL year mentions (e.g., "năm 2023", "năm 2024", "năm 2025", "năm 2026")**
+   - **CRITICAL: For dates like "20/1" or "7/1", look for the year in the SAME SOURCE/paragraph**
+   - Quote exact dates with years: "Theo Nguồn X: 'ngày 20/1/2025...'" or "Theo Nguồn Y: 'đến tháng 10 năm 2023...'"
+   
+   Step 2 - IDENTIFY MOST RECENT:
+   - If multiple years found → Identify which is NEWEST (2026 > 2025 > 2024 > 2023...)
+   - State explicitly: "Nguồn mới nhất: Nguồn X (năm 2025), Nguồn cũ: Nguồn Y (năm 2023)"
+   
+   Step 3 - MAKE DECISION:
+   - For "current/now" questions → ONLY use the NEWEST source, IGNORE old data
+   - Compare what the NEWEST source says vs the STATEMENT
+   - Explain why you trust/distrust the evidence
+   
+   Write 2-3 clear paragraphs following these steps
    - DO NOT include any JSON, code blocks, or special formatting in your explanation
 
 6. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:
@@ -70,7 +88,10 @@ STATEMENT:
 MUST_HAVE_FINAL_ANSWER_PROMPT = f"""\
 Instructions:
 1. You are provided with a STATEMENT and relevant KNOWLEDGE points from web search.
-2. **CRITICAL: You MUST base your decision ONLY on the KNOWLEDGE provided. DO NOT use your internal training knowledge.**
+2. **WHEN TO USE KNOWLEDGE:**
+   - **Basic Facts:** If KNOWLEDGE is empty, you CAN use internal knowledge for well-known facts
+   - **Current Events:** MUST use KNOWLEDGE only, NOT internal training
+   - **Contradictions:** TRUST KNOWLEDGE from reliable sources over your training data
 3. **TEMPORAL REASONING (for "current"/"now" questions):**
    - **FIRST: Extract ALL dates with COMPLETE year information from KNOWLEDGE**
    - **Example: If you see "ngày 20/1", look for "năm 2025" or "năm 2026" nearby in the text**
@@ -82,12 +103,22 @@ Instructions:
    - If KNOWLEDGE directly confirms the claim → True
    - If KNOWLEDGE directly refutes the claim → False
    - If KNOWLEDGE is insufficient → Not Enough Info
-5. First, provide your reasoning in Vietnamese (tiếng Việt):
-   - **IMPORTANT: First sentence must identify the exact year from evidence (e.g., "Sự kiện xảy ra ngày 20/1/2025, không phải 2026")**
-   - Quote relevant dates WITH FULL YEAR from KNOWLEDGE
-   - Explain temporal reasoning if applicable
-   - Show how KNOWLEDGE supports your decision
-   - Write 2-3 clear paragraphs explaining your analysis
+5. **CHAIN-OF-THOUGHT REASONING** - First, provide your step-by-step reasoning in Vietnamese:
+   Step 1 - EXTRACT ALL TEMPORAL EVIDENCE:
+   - **CRITICAL: List ALL years mentioned in KNOWLEDGE (e.g., "Nguồn 1: năm 2025", "Nguồn 2: năm 2023")**
+   - For each source, quote the exact date with year
+   
+   Step 2 - RANK BY RECENCY:
+   - Order sources by date (newest to oldest)
+   - For "current/now" claims → State: "Nguồn mới nhất (năm YYYY) nói: ..."
+   
+   Step 3 - VERIFY AGAINST STATEMENT:
+   - Compare what the NEWEST/MOST RELEVANT source states
+   - Does it match the STATEMENT? → True
+   - Does it contradict? → False
+   - Not enough info? → Not Enough Info
+   
+   Write 2-3 clear paragraphs following these steps
    - DO NOT include any JSON, code blocks, or special formatting in your explanation
 
 6. After your Vietnamese explanation, on a new line, output ONLY the JSON decision:

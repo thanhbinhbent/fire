@@ -107,10 +107,10 @@ async def check_fact(request: FactCheckRequest):
             final_answer, search_results, usage = verify_atomic_claim(
                 atomic_claim=request.claim,
                 rater=model_instance,
-                max_steps=3,
+                max_steps=4,  # Increased from 3 for better accuracy
                 max_retries=2,
                 diverse_prompt=True,
-                tolerance=2
+                tolerance=3  # Increased from 2 to allow more diverse searches
             )
             
             google_searches = search_results.get('google_searches', [])

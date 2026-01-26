@@ -15,6 +15,9 @@ class EvidenceValidator:
     """
 
     def __init__(self):
+        # Initialize sentence transformer for semantic similarity (lazy load)
+        self._semantic_model = None
+        
         self.trusted_sources = {
             "tier1": [
                 "baochinhphu.vn",
@@ -148,6 +151,45 @@ class EvidenceValidator:
             relevance = overlap_ratio
 
         return min(relevance, 1.0)
+
+    def _load_semantic_model(self):
+        """Lazy load sentence transformer for semantic similarity."""
+        if self._semantic_model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                # Use lightweight multilingual model for Vietnamese
+                self._semantic_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+            except Exception as e:
+                print(f"Could not load semantic model: {e}")
+                self._semantic_model = False
+        return self._semantic_model
+
+    def calculate_semantic_similarity(self, claim: str, evidence: str) -> float:
+        """
+        Calculate semantic similarity between claim and evidence using embeddings.
+        More accurate than keyword matching for Vietnamese.
+        
+        Args:
+            claim: Original claim
+            evidence: Evidence text
+            
+        Returns:
+            float: Semantic similarity score (0-1)
+        """
+        model = self._load_semantic_model()
+        if not model:
+            # Fallback to lexical matching
+            return self.calculate_relevance(claim, evidence)
+        
+        try:
+            from sentence_transformers import util
+            claim_embedding = model.encode(claim, convert_to_tensor=True)
+            evidence_embedding = model.encode(evidence, convert_to_tensor=True)
+            similarity = util.cos_sim(claim_embedding, evidence_embedding)
+            return float(similarity[0][0])
+        except Exception as e:
+            print(f"Semantic similarity calculation failed: {e}")
+            return self.calculate_relevance(claim, evidence)
 
     def extract_temporal_info(self, text: str, source_url: str = "") -> Optional[datetime]:
         """
