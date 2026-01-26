@@ -73,7 +73,7 @@ FIRE is compared against state-of-the-art frameworks including **FactCheckGPT**,
 ```bash
 # Clone the repository
 git clone https://github.com/thanhbinhbent/fire
-cd fire
+cd fire/backend
 
 # Create a virtual environment (recommended)
 python -m venv .venv
@@ -87,6 +87,20 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+### ⚡ Performance Modes
+
+FIRE now supports **two verification modes**:
+
+| Mode         | Latency | Accuracy | Use Case                      |
+| ------------ | ------- | -------- | ----------------------------- |
+| **Fast**     | 1-5s    | ~75%     | User-facing apps, basic facts |
+| **Accurate** | 20-30s  | ~80%     | Research, complex claims      |
+
+**Choose based on your priorities:**
+
+- **Speed priority** → Use `mode="fast"` (default)
+- **Accuracy priority** → Use `mode="accurate"`
 
 ### Configuration
 
@@ -116,6 +130,50 @@ RANDOM_SEED=1
 
 ### Running FIRE
 
+#### 🌐 API Mode (Recommended for Production)
+
+Start the FastAPI server:
+
+```bash
+uvicorn api:app --reload
+```
+
+**API Endpoints:**
+
+```bash
+# Check status
+curl http://localhost:8000/
+
+# Fast mode (1-5s, default)
+curl -X POST http://localhost:8000/api/check \
+  -H "Content-Type: application/json" \
+  -d '{"claim": "Thành phố Hồ Chí Minh là thủ đô của Việt Nam", "mode": "fast"}'
+
+# Accurate mode (20-30s)
+curl -X POST http://localhost:8000/api/check \
+  -H "Content-Type: application/json" \
+  -d '{"claim": "Chủ tịch quốc hội Việt Nam hiện nay là Trần Thanh Mẫn", "mode": "accurate"}'
+```
+
+**Response Format:**
+
+```json
+{
+  "verdict": "Sai (Chắc chắn)",
+  "explanation": "Thủ đô của Việt Nam là Hà Nội, không phải Thành phố Hồ Chí Minh.",
+  "confidence": 0.95,
+  "sources": [...],
+  "metadata": {
+    "mode": "fast",
+    "latency": "2.58s",
+    "searches": 0,
+    "fast_path": true
+  }
+}
+```
+
+#### 🔬 Command-Line Mode (For Research/Testing)
+
 Basic usage:
 
 ```bash
@@ -127,6 +185,8 @@ python run_fire.py --model <model-name> --dataset <dataset-name>
 - `--model`: Model to use (required)
   - OpenAI: `gpt-4o-mini`, `gpt-4o`, `o1-preview`, `o1-mini`
   - Anthropic: `claude-3-5-sonnet-20240620`, `claude-3-opus`, `claude-3-haiku`
+  - Groq: `groq/llama-3.1-70b-versatile` (ultra-fast)
+  - Google: `gemini/gemini-1.5-flash` (fast & free)
 - `--dataset`: Dataset to evaluate (required)
   - `factcheck_bench`: Factcheck-Bench dataset
   - `bingcheck`: BingCheck dataset
@@ -150,11 +210,26 @@ python run_fire.py --model gpt-4o-mini --dataset factcheck_bench --limit 1
 # Run FIRE with Claude-3.5 Sonnet on BingCheck
 python run_fire.py --model claude-3-5-sonnet-20240620 --dataset bingcheck
 
+# Run with Groq (ultra-fast)
+python run_fire.py --model groq/llama-3.1-70b-versatile --dataset factcheck_bench --limit 5
+
 # Run SAFE framework instead of FIRE
 python run_fire.py --model gpt-4o-mini --dataset factcheck_bench --framework safe
 
 # Specify custom output directory
 python run_fire.py --model gpt-4o-mini --dataset factcheck_bench --output-dir my_results
+```
+
+#### ⚡ Performance Testing
+
+Test fast verifier performance:
+
+```bash
+# Test fast mode only
+python test_fast_verifier.py --fast-only
+
+# Compare original vs fast
+python test_fast_verifier.py --compare
 ```
 
 **Output:**

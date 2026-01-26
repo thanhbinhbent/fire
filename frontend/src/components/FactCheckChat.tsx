@@ -46,14 +46,14 @@ const renderMarkdown = (text: string) => {
         parts.push(
           <strong key={`${idx}-${match.index}`} className="font-semibold">
             {match[1]}
-          </strong>
+          </strong>,
         );
       } else if (match[2]) {
         // Italic
         parts.push(
           <em key={`${idx}-${match.index}`} className="italic">
             {match[2]}
-          </em>
+          </em>,
         );
       }
 
@@ -88,6 +88,9 @@ export function FactCheckChat() {
   >(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [verificationMode, setVerificationMode] = useState<"fast" | "accurate">(
+    "fast",
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load conversations on mount
@@ -105,7 +108,7 @@ export function FactCheckChat() {
   }, []);
 
   const currentConversation = conversations.find(
-    (c) => c.id === currentConversationId
+    (c) => c.id === currentConversationId,
   );
 
   // Auto-scroll to bottom
@@ -115,7 +118,7 @@ export function FactCheckChat() {
 
   const updateConversation = (id: string, updates: Partial<Conversation>) => {
     const updated = conversations.map((conv) =>
-      conv.id === id ? { ...conv, ...updates, updatedAt: new Date() } : conv
+      conv.id === id ? { ...conv, ...updates, updatedAt: new Date() } : conv,
     );
     setConversations(updated);
     saveConversations(updated);
@@ -181,7 +184,10 @@ export function FactCheckChat() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ claim: claimToCheck }),
+        body: JSON.stringify({
+          claim: claimToCheck,
+          mode: verificationMode,
+        }),
       });
 
       if (!response.ok) {
@@ -339,7 +345,7 @@ export function FactCheckChat() {
                                   <div
                                     className={`p-2 rounded-lg ${
                                       getVerdictColor(
-                                        message.result.verdict
+                                        message.result.verdict,
                                       ).split(" ")[0]
                                     }`}
                                   >
@@ -351,7 +357,7 @@ export function FactCheckChat() {
                                     </p>
                                     <Badge
                                       className={`${getVerdictColor(
-                                        message.result.verdict
+                                        message.result.verdict,
                                       )} mt-0.5 font-semibold`}
                                     >
                                       {message.result.verdict}
@@ -466,11 +472,69 @@ export function FactCheckChat() {
                                             </div>
                                           )}
                                         </div>
-                                      )
+                                      ),
                                     )}
                                   </div>
                                 </div>
                               )}
+
+                            {/* Metadata Info */}
+                            {message.result.metadata && (
+                              <div className="bg-muted/30 backdrop-blur-sm rounded-lg p-3 border border-border">
+                                <div className="flex flex-wrap gap-3 text-xs">
+                                  {message.result.metadata.mode && (
+                                    <div className="flex items-center gap-1.5">
+                                      {message.result.metadata.mode ===
+                                      "fast" ? (
+                                        <Sparkles className="h-3 w-3 text-amber-500" />
+                                      ) : (
+                                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                      )}
+                                      <span className="text-muted-foreground">
+                                        Chế độ:{" "}
+                                        <span className="font-medium text-foreground">
+                                          {message.result.metadata.mode ===
+                                          "fast"
+                                            ? "Nhanh"
+                                            : "Chính xác"}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  )}
+                                  {message.result.metadata.latency && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-muted-foreground">
+                                        Thời gian:{" "}
+                                        <span className="font-medium text-foreground">
+                                          {message.result.metadata.latency}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  )}
+                                  {message.result.metadata.searches !==
+                                    undefined && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-muted-foreground">
+                                        Tìm kiếm:{" "}
+                                        <span className="font-medium text-foreground">
+                                          {message.result.metadata.searches}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  )}
+                                  {message.result.metadata.fast_path !==
+                                    undefined && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-muted-foreground">
+                                        {message.result.metadata.fast_path
+                                          ? "⚡ Fast-path"
+                                          : "🔄 Full search"}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -513,6 +577,50 @@ export function FactCheckChat() {
             {/* Input Area */}
             <div className="p-3 md:p-4 lg:p-6 border-t bg-slate-50 dark:bg-slate-900">
               <div className="max-w-4xl mx-auto">
+                {/* Mode Selector */}
+                <div className="mb-3 flex items-center gap-3 justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Chế độ:
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={
+                          verificationMode === "fast" ? "default" : "outline"
+                        }
+                        onClick={() => setVerificationMode("fast")}
+                        disabled={isLoading}
+                        className="h-8 text-xs"
+                      >
+                        <Sparkles className="h-3 w-3 mr-1.5" />
+                        Nhanh
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={
+                          verificationMode === "accurate"
+                            ? "default"
+                            : "outline"
+                        }
+                        onClick={() => setVerificationMode("accurate")}
+                        disabled={isLoading}
+                        className="h-8 text-xs"
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                        Chính xác{" "}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground hidden md:block">
+                    {verificationMode === "fast"
+                      ? "⚡ Nhanh với bằng chứng"
+                      : "🎯 Chính xác cao"}
+                  </div>
+                </div>
+
                 <form onSubmit={handleSubmit} className="flex gap-2 md:gap-3">
                   <Textarea
                     value={input}

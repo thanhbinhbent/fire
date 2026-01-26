@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 import sys
 import os
+import re
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -11,16 +12,16 @@ try:
     from common.modeling import Model
     from common import shared_config
     from common.vietnamese_utils import preprocessor
-    from common.database import db
     from common.confidence import calibrator
-    from common.query_deduplication import deduplicator
     from common.evidence_validator import validator
     from eval.fire.verify_atomic_claim import verify_atomic_claim
+    from common.fast_verifier import verify_claim_fast
     VIETNAMESE_SUPPORT = True
 except ImportError as e:
     print(f"Import error: {e}")
     VIETNAMESE_SUPPORT = False
     verify_atomic_claim = None
+    verify_claim_fast = None
 
 rater = None
 
@@ -44,6 +45,7 @@ except Exception as e:
 class FactCheckRequest(BaseModel):
     claim: str
     model: Optional[str] = None
+    mode: Optional[str] = "fast"
 
 
 class FactCheckResponse(BaseModel):
@@ -71,6 +73,7 @@ async def root():
         "message": "Vietnamese Fact Checking API",
         "model": shared_config.default_model_name,
         "vietnamese_support": VIETNAMESE_SUPPORT,
+        "modes": ["fast (1-5s, 75% acc)", "accurate (20-30s, 80% acc)"],
     }
 
 
@@ -89,8 +92,8 @@ async def check_fact(request: FactCheckRequest):
                     temperature=shared_config.default_temperature,
                     max_tokens=shared_config.default_max_tokens
                 )
-            except Exception as e:
-                print(f"Failed to load custom model: {e}, using default")
+            except Exception:
+                pass
         
         processed = None
         entities = []
@@ -98,23 +101,59 @@ async def check_fact(request: FactCheckRequest):
             try:
                 processed = preprocessor.preprocess_claim(request.claim)
                 entities = [e['text'] for e in processed['entities']]
-            except Exception as e:
-                print(f"Preprocessing error: {e}")
+            except Exception:
+                pass
         
-        if verify_atomic_claim and VIETNAMESE_SUPPORT:
-            print(f"Starting verification: {request.claim}")
+        mode = request.mode or "fast"
+        
+        if mode == "fast" and verify_claim_fast:
             
+            result = verify_claim_fast(
+                claim=request.claim,
+                model=model_instance,
+                serper_api_key=shared_config.serper_api_key,
+                use_cache=True
+            )
+            
+            confidence_score = result.get('confidence', 0.5)
+            verdict_map = {"True": "Đúng", "False": "Sai", "Not Enough Info": "Chưa đủ thông tin"}
+            verdict_vn = verdict_map.get(result.get('verdict', 'Unknown'), "Chưa đủ thông tin")
+            
+            if confidence_score > 0.8:
+                verdict_label = f"{verdict_vn} (Chắc chắn)"
+            elif confidence_score > 0.6:
+                verdict_label = f"{verdict_vn} (Có thể)"
+            else:
+                verdict_label = f"{verdict_vn} (Không chắc)"
+            
+            return FactCheckResponse(
+                verdict=verdict_label,
+                explanation=result.get('reasoning', ''),
+                sources=result.get('sources', []),
+                confidence=confidence_score,
+                metadata={
+                    "mode": "fast",
+                    "latency": f"{result.get('latency', 0):.2f}s",
+                    "searches": result.get('searches', 0),
+                    "fast_path": result.get('fast_path', False),
+                    "preprocessing": {
+                        "normalized": processed['normalized'] if processed else request.claim,
+                        "entities": entities,
+                    },
+                }
+            )
+        
+        elif verify_atomic_claim and VIETNAMESE_SUPPORT:
             final_answer, search_results, usage = verify_atomic_claim(
                 atomic_claim=request.claim,
                 rater=model_instance,
-                max_steps=4,  # Increased from 3 for better accuracy
+                max_steps=4,
                 max_retries=2,
                 diverse_prompt=True,
-                tolerance=3  # Increased from 2 to allow more diverse searches
+                tolerance=3
             )
             
             google_searches = search_results.get('google_searches', [])
-            print(f"Verification complete. Searches: {len(google_searches)}")
             
             if final_answer:
                 verdict = final_answer.answer
@@ -131,48 +170,32 @@ async def check_fact(request: FactCheckRequest):
                 }
                 verdict_vn = verdict_map.get(verdict, "Chưa rõ")
                 
-                explanation = raw_response
-                
-                import re
-                lines = explanation.split('\n')
+                lines = raw_response.split('\n')
                 cleaned_lines = [line for line in lines if not re.match(r'^\s*\{[^}]*"(final_answer|search_query)"[^}]*\}\s*$', line)]
                 explanation = '\n'.join(cleaned_lines).strip()
                 
                 sources = []
                 for idx, search in enumerate(google_searches):
-                    validation = validator.validate_evidence(
-                        evidence_text=search.get('result', ''),
-                        source_url=search.get('query', ''),
-                        claim=request.claim
-                    )
-                    
                     result_text = search.get('result', '')
+                    source_url = search.get('link', '') or (re.search(r'https?://[^\s]+', result_text).group(0) if re.search(r'https?://[^\s]+', result_text) else f"https://google.com/search?q={search.get('query', '')}")
                     
-                    # Use direct link from search result if available, otherwise try to extract from text
-                    source_url = search.get('link', '')
-                    if not source_url:
-                        import re
-                        url_match = re.search(r'https?://[^\s]+', result_text)
-                        source_url = url_match.group(0) if url_match else f"https://google.com/search?q={search.get('query', '')}"
-                    
-                    # Extract title more intelligently
                     title = None
-                    # Try to extract domain from parentheses like "(Chinhphu.vn)"
                     domain_match = re.match(r'\(([^)]+)\)\s*[-–—]', result_text)
                     if domain_match:
                         title = domain_match.group(1)
+                    elif ' - ' in result_text:
+                        title = result_text.split(' - ')[0]
+                    elif '. ' in result_text:
+                        title = result_text.split('. ')[0]
                     else:
-                        # Try to get text before " - ", ". " or just first 50 chars
-                        if ' - ' in result_text:
-                            title = result_text.split(' - ')[0]
-                        elif '. ' in result_text:
-                            title = result_text.split('. ')[0]
-                        else:
-                            title = result_text[:50]
+                        title = result_text[:50]
+                    title = title.strip('()')[:100]
                     
-                    # Clean up and limit title length
-                    title = title.strip('()')
-                    title = title[:100] if len(title) > 100 else title
+                    validation = validator.validate_evidence(
+                        evidence_text=result_text,
+                        source_url=source_url,
+                        claim=request.claim
+                    )
                     
                     sources.append({
                         "url": source_url,

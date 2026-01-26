@@ -11,9 +11,9 @@ groq_api_key = os.getenv('GROQ_API_KEY', '')
 gemini_api_key = os.getenv('GEMINI_API_KEY', '')
 azure_api_key = os.getenv('AZURE_API_KEY', '')
 
-default_model_name = os.getenv('DEFAULT_MODEL_NAME', 'openai/gpt-4o-mini')
-default_temperature = float(os.getenv('DEFAULT_TEMPERATURE', '0.5'))
-default_max_tokens = int(os.getenv('DEFAULT_MAX_TOKENS', '2048'))
+default_model_name = os.getenv('DEFAULT_MODEL_NAME', 'gemini/gemini-2.0-flash-exp')
+default_temperature = float(os.getenv('DEFAULT_TEMPERATURE', '0.3'))
+default_max_tokens = int(os.getenv('DEFAULT_MAX_TOKENS', '1500'))
 
 model_name = default_model_name
 api_key = openai_api_key

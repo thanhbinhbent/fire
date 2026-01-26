@@ -85,7 +85,9 @@ Rules:
 Return ONLY valid JSON, no explanations."""
 
         try:
-            response, _ = llm.generate(analysis_prompt, max_tokens=300, temperature=0.2)
+            # Note: Model.generate() doesn't accept max_tokens/temperature parameters
+            # These are set in Model.__init__() instead
+            response, _ = llm.generate(analysis_prompt)
             
             # Extract JSON from response
             from common.utils import extract_json_from_output

@@ -44,14 +44,15 @@ class ConfidenceCalibrator:
             float: Confidence score between 0 and 1
         """
         # Improved base scores: higher for clear verdicts, lower for NEI
+        # Performance optimized: higher scores = faster early stopping
         base_scores = {
-            "TRUE": 0.80,  # Increased from 0.75
-            "FALSE": 0.80,  # Increased from 0.75
-            "NOT ENOUGH INFO": 0.35,  # Decreased from 0.4 (less confident)
-            "SUPPORTS": 0.80,
-            "REFUTES": 0.80,
-            "SUPPORTED": 0.80,
-            "REFUTED": 0.80,
+            "TRUE": 0.85,  # Increased for speed
+            "FALSE": 0.85,  # Increased for speed
+            "NOT ENOUGH INFO": 0.30,  # Lower to prefer searching
+            "SUPPORTS": 0.85,
+            "REFUTES": 0.85,
+            "SUPPORTED": 0.85,
+            "REFUTED": 0.85,
         }
         confidence = base_scores.get(verdict.upper(), 0.5)
 

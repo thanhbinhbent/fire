@@ -20,6 +20,10 @@ export interface FactCheckResult {
   sources?: (string | SourceInfo)[];
   confidence?: number;
   metadata?: {
+    mode?: string; // "fast" or "accurate"
+    latency?: string; // "5.22s"
+    searches?: number; // Number of searches performed
+    fast_path?: boolean; // Whether fast-path was used
     preprocessing?: {
       normalized?: string;
       entities?: string[];
@@ -31,6 +35,5 @@ export interface FactCheckResult {
       raw_verdict?: string;
     };
     vietnamese_support?: boolean;
-    mode?: string;
   };
 }
