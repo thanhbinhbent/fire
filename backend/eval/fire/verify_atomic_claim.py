@@ -6,7 +6,7 @@ and then let the model decide if the information is enough to make a judgement o
 
 import dataclasses
 import torch
-from typing import Any
+from typing import Any, Union, List, Optional, Dict, Tuple
 from common import modeling, shared_config, utils
 from eval.fire import config as fire_config
 from eval.fire import query_serper
@@ -66,7 +66,7 @@ def call_search(
         search_postamble: str = '',
         atomic_claim: str = '',
         with_links: bool = False,
-) -> str | list:
+) -> Union[str, list]:
     """Call Google Search to get the search result with Vietnamese enhancements."""
     
     if VIETNAMESE_SUPPORT and atomic_claim:
@@ -130,11 +130,11 @@ def get_sentence_similarity(new_sent, sentences, threshold=0.9):
 
 def final_answer_or_next_search(
         atomic_claim: str,
-        past_searches: list[GoogleSearchResult],
+        past_searches: List[GoogleSearchResult],
         model: modeling.Model,
         diverse_prompt: bool = False,
         tolerance: int = 4,
-) -> tuple[FinalAnswer | GoogleSearchResult | None |str, dict|None]:
+) -> Tuple[Union[FinalAnswer, GoogleSearchResult, None, str], Optional[Dict]]:
     """Get the next query from the model.
     atomic_claim: The claim that we need to verify.
     past_searches: The search results from the previous searches.
@@ -227,9 +227,9 @@ def final_answer_or_next_search(
     
 def must_get_final_answer(
         atomic_fact: str,
-        searches: list[GoogleSearchResult],
+        searches: List[GoogleSearchResult],
         model: modeling.Model,
-) -> tuple[FinalAnswer | None, dict|None]:
+) -> Tuple[Optional[FinalAnswer], Optional[Dict]]:
     '''
     Handles cases where the model does not return a valid answer and re.sub cannot parse the answer.
     '''
@@ -304,7 +304,7 @@ def verify_atomic_claim(
         max_retries: int = fire_config.max_retries,
         diverse_prompt: bool = fire_config.diverse_prompt,
         tolerance: int = fire_config.max_tolerance,
-) -> tuple[FinalAnswer | None, dict[str, Any], dict | None]:
+) -> Tuple[Optional[FinalAnswer], Dict[str, Any], Optional[Dict]]:
     '''
     We verify the atomic_claims by interactively calling the tools.
     :param atomic_claim: The claim that we need to verify.

@@ -1,8 +1,8 @@
 import json, re
-from typing import Any
+from typing import Any, Union, List, Optional, Dict
 
 
-def join_segments(*args: str | list[str], separator: str = '\n\n\n') -> str:
+def join_segments(*args: Union[str, List[str]], separator: str = '\n\n\n') -> str:
     all_segments = []
     for arg in args:
         if isinstance(arg, list):
@@ -16,7 +16,7 @@ def strip_string(s: str) -> str:
     return s.strip(' \n')
 
 
-def extract_json_from_output(model_output) -> dict | None:
+def extract_json_from_output(model_output) -> Optional[Dict]:
     json_match = re.search(r'{.*}', model_output, re.DOTALL)
     if json_match:
         try:

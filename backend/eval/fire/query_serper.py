@@ -63,7 +63,7 @@ class SerperAPI:
       search_type: str = 'search',
       max_retries: int = 20,
       **kwargs: Any,
-  ) -> dict[Any, Any]:
+  ) -> Dict[Any, Any]:
     """Run query through Google Serper."""
     headers = {
         'X-API-KEY': self.serper_api_key or '',
@@ -96,7 +96,7 @@ class SerperAPI:
     search_results = response.json()
     return search_results
 
-  def _parse_snippets(self, results: dict[Any, Any]) -> list[str]:
+  def _parse_snippets(self, results: Dict[Any, Any]) -> List[str]:
     """Parse results."""
     snippets = []
 
@@ -143,7 +143,7 @@ class SerperAPI:
 
     return snippets
 
-  def _parse_results(self, results: dict[Any, Any]) -> str:
+  def _parse_results(self, results: Dict[Any, Any]) -> str:
     return ' '.join(self._parse_snippets(results))
 
 
