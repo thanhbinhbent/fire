@@ -1,9 +1,0 @@
-__pycache__/
-results/
-__init__.py
-.venv
-
-# Environment variables
-.env
-*.env
-!.env.example
