@@ -188,10 +188,11 @@ python run_fire.py --model <model-name> --dataset <dataset-name>
   - Groq: `groq/llama-3.1-70b-versatile` (ultra-fast)
   - Google: `gemini/gemini-1.5-flash` (fast & free)
 - `--dataset`: Dataset to evaluate (required)
-  - `factcheck_bench`: Factcheck-Bench dataset
-  - `bingcheck`: BingCheck dataset
-  - `factool_qa`: FacTool-QA dataset
-  - `felm_wk`: FELM-WK dataset
+  - `factcheck_bench`: Factcheck-Bench dataset (631 claims)
+  - `bingcheck`: BingCheck dataset (142 claims)
+  - `factool_qa`: FacTool-QA dataset (233 claims)
+  - `felm_wk`: FELM-WK dataset (184 claims)
+  - `vifactcheck`: Vietnamese ViFactCheck dataset (20 claims)
 - `--framework`: Framework to use (default: `fire`)
   - Options: `fire`, `safe`
 - `--limit`: Limit number of claims to process (optional)

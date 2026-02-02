@@ -1,15 +1,16 @@
 # Fact-Checking Dataset
 
-This dataset contains four separate data folders, each representing a different fact-checking dataset. All datasets share the same structure, and the label is a binary indicator of whether the claim is true or false.
+This dataset contains five separate data folders, each representing a different fact-checking dataset. All datasets share the same structure, and the label is a binary indicator of whether the claim is true or false.
 
 ## Structure
 
-The dataset consists of the following four directories:
+The dataset consists of the following five directories:
 
-1. **bingcheck**
-2. **factcheckbench**
-3. **factool_qa**
-4. **felm_wk**
+1. **bingcheck** - General fact-checking claims
+2. **factcheckbench** - Academic fact-checking benchmark
+3. **factool_qa** - Question-answering based fact-checking
+4. **felm_wk** - Wikipedia-based fact-checking
+5. **vifactcheck** - Vietnamese fact-checking dataset
 
 Each directory contains a `data.jsonl` file, which holds the data in the following format:
 
