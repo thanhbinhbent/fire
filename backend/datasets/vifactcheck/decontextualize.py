@@ -9,6 +9,9 @@ from typing import Literal, Optional
 from openai import OpenAI
 from anthropic import Anthropic
 
+# Add import for ViFactCheckLoader
+from vifactcheck_loader import ViFactCheckLoader
+
 
 class DecontextualizeConfig:
     """Configuration for decontextualization"""
@@ -134,9 +137,11 @@ TUYÊN BỐ ĐỘC LẬP:"""
                 standalone_claim = self.decontextualize(original_claim, context)
                 
                 processed_record = {
-                    **record,
+                    'id': i,  # Add sample index for reference
+                    'claim': standalone_claim,
                     'original_claim': original_claim,
-                    'claim': standalone_claim,  # Replace with decontextualized version
+                    'label': mapped_label,
+                    'evidence': evidence,
                     'decontextualized': True
                 }
                 processed_records.append(processed_record)
@@ -148,7 +153,10 @@ TUYÊN BỐ ĐỘC LẬP:"""
             except Exception as e:
                 print(f"  Error: {e}")
                 processed_records.append({
-                    **record,
+                    'id': i,
+                    'claim': original_claim,
+                    'label': mapped_label,
+                    'evidence': evidence,
                     'decontextualized': False,
                     'error': str(e)
                 })
@@ -159,6 +167,80 @@ TUYÊN BỐ ĐỘC LẬP:"""
         
         print(f"Processed {len(processed_records)} records")
         print(f"Saved to {output_path}")
+
+    def process_vifactcheck_dataset(self, split: str = "test", output_path: str = "vifactcheck_decontextualized.jsonl", include_nei: bool = False):
+        """
+        Process ViFactCheck dataset and save decontextualized versions.
+        
+        Args:
+            split: Dataset split to process ('train', 'validation', 'test')
+            output_path: Path to save processed dataset (JSONL format)
+            include_nei: Whether to include NEI samples
+        """
+        loader = ViFactCheckLoader()
+        dataset = loader.load_dataset(split=split)
+        
+        processed_records = []
+        for i, sample in enumerate(dataset):
+            print(f"Processing sample {i+1}/{len(dataset)}...")
+            
+            original_claim = sample.get('Statement', sample.get('claim', ''))
+            evidence = sample.get('Evidence', sample.get('evidence', ''))
+            label = sample.get('labels', sample.get('label', ''))
+            context = sample.get('Context', sample.get('context', ''))
+            
+            # Skip if no claim or evidence
+            print(i, not original_claim or not evidence)
+            print(original_claim)
+            print(evidence)
+            if not original_claim or not evidence:
+                continue
+            
+            # Map label for filtering
+            if isinstance(label, int):
+                mapped_label = {0: 'true', 1: 'false', 2: 'nei'}.get(label, 'nei')
+            else:
+                mapped_label = str(label).lower()
+            
+            if mapped_label == 'nei' and not include_nei:
+                continue
+            
+            try:
+                standalone_claim = self.decontextualize(original_claim, evidence)
+                
+                processed_record = {
+                    'claim': standalone_claim,
+                    'original_claim': original_claim,
+                    'label': mapped_label,
+                    'evidence': evidence,
+                    'context': context,
+                    'decontextualized': True
+                }
+                processed_records.append(processed_record)
+                
+                print(f"  Original: {original_claim}")
+                print(f"  Standalone: {standalone_claim}")
+                print()
+                
+            except Exception as e:
+                print(f"  Error: {e}")
+                processed_records.append({
+                    'claim': original_claim,
+                    'label': mapped_label,
+                    'evidence': evidence,
+                    'context': context,
+                    'decontextualized': False,
+                    'error': str(e)
+                })
+        
+        # Save as JSONL
+        with open(output_path, 'w', encoding='utf-8') as f:
+            for record in processed_records:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        
+        print(f"Processed {len(processed_records)} records from '{split}' split")
+        print(f"Saved to {output_path}")
+
 
 
 # Example usage
@@ -186,8 +268,15 @@ if __name__ == "__main__":
     
     decontextualizer = Decontextualizer(config_local)
     
-    # Process sample data (updated paths for running from vifactcheck directory)
-    decontextualizer.process_dataset(
-        dataset_path="sample_data.json",
-        output_path="sample_data_decontextualized.json"
+    # # Process sample data (updated paths for running from vifactcheck directory)
+    # decontextualizer.process_dataset(
+    #     dataset_path="sample_data.json",
+    #     output_path="sample_data_decontextualized.json"
+    # )
+
+    # Process ViFactCheck dataset
+    decontextualizer.process_vifactcheck_dataset(
+        split="test",
+        output_path="vifactcheck_decontextualized.jsonl",
+        include_nei=True, # without NEI
     )

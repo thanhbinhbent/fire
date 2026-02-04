@@ -46,7 +46,8 @@ def main():
         'felm_wk': 'felm_wk',
         'vifactcheck': 'vifactcheck',
         'vi_factcheck': 'vifactcheck',
-        'vifact': 'vifactcheck'
+        'vifact': 'vifactcheck',
+        'vifactcheck_decontextualized': 'vifactcheck_decontextualized',
     }
 
     benchmark = dataset_map.get(args.dataset.lower(), args.dataset)
@@ -81,6 +82,10 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     dataset_path = f'datasets/{benchmark}/data.jsonl'
+    
+    # TEST: Modify dataset_path to handle decontextualized dataset
+    if benchmark == 'vifactcheck_decontextualized':
+        dataset_path = 'datasets/vifactcheck/vifactcheck_decontextualized.jsonl'
 
     if not os.path.exists(dataset_path):
         print(f"Error: Dataset file not found: {dataset_path}")
