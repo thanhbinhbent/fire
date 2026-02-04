@@ -75,9 +75,6 @@ def main():
 
     if framework == 'fire':
         from eval.fire.verify_atomic_claim import verify_atomic_claim
-    elif framework == 'safe':
-        from eval.safe.rate_atomic_fact import check_atomic_fact
-        verify_atomic_claim = check_atomic_fact
 
     os.makedirs(args.output_dir, exist_ok=True)
 
