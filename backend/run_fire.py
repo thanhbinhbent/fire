@@ -11,16 +11,18 @@ from tqdm import tqdm
 from langchain_community.callbacks.manager import get_openai_callback
 from common.modeling import Model
 from common.shared_config import openai_api_key, serper_api_key, anthropic_api_key
-from common.utils import calculate_cost_claude
 
 
 def main():
     parser = argparse.ArgumentParser(
         description='Run FIRE fact-checking framework')
     parser.add_argument('--model', type=str, required=True,
-                        help='Model to use (e.g., gpt-4o-mini, gpt-4o, claude-3-5-sonnet-20240620)')
+                        help='Model to use (e.g., gpt-4o-mini, claude-3-5-sonnet, gemma3:4b for local)')
+    parser.add_argument('--provider', type=str, default=None,
+                        choices=['openai', 'anthropic', 'local', 'ollama'],
+                        help='LLM provider (auto-detected if not specified)')
     parser.add_argument('--dataset', type=str, required=True,
-                        help='Dataset to evaluate (e.g., factcheck_bench, bingcheck, factool_qa, felm_wk)')
+                        help='Dataset to evaluate (e.g., factcheck_bench, bingcheck, factool_qa, felm_wk, vifactcheck)')
     parser.add_argument('--framework', type=str, default='fire',
                         choices=['fire', 'safe'],
                         help='Framework to use (default: fire)')
@@ -41,28 +43,46 @@ def main():
         'bing_check': 'bingcheck',
         'bingcheck': 'bingcheck',
         'factool_qa': 'factool_qa',
-        'felm_wk': 'felm_wk'
+        'felm_wk': 'felm_wk',
+        'vifactcheck': 'vifactcheck',
+        'vi_factcheck': 'vifactcheck',
+        'vifact': 'vifactcheck',
+        'vifactcheck_decontextualized': 'vifactcheck_decontextualized',
     }
 
     benchmark = dataset_map.get(args.dataset.lower(), args.dataset)
     framework = args.framework
 
+    # Determine provider and format model name
     model_name_full = args.model
-    if not any(prefix in args.model for prefix in ['openai:', 'anthropic:', 'together:']):
+    provider = args.provider
+    
+    if provider:
+        # Explicit provider specified
+        if provider in ['local', 'ollama']:
+            model_name_full = f'ollama:{args.model}'
+        else:
+            model_name_full = f'{provider}:{args.model}'
+    elif not any(prefix in args.model for prefix in ['openai:', 'anthropic:', 'together:', 'local:', 'ollama:']):
+        # Auto-detect provider from model name
         if args.model.startswith('gpt') or args.model.startswith('o1'):
             model_name_full = f'openai:{args.model}'
         elif args.model.startswith('claude'):
             model_name_full = f'anthropic:{args.model}'
+        elif args.model.startswith('gemma') or args.model.startswith('llama') or args.model.startswith('mistral') or args.model.startswith('qwen'):
+            # Common local model prefixes - default to local Ollama
+            model_name_full = f'ollama:{args.model}'
 
     if framework == 'fire':
         from eval.fire.verify_atomic_claim import verify_atomic_claim
-    elif framework == 'safe':
-        from eval.safe.rate_atomic_fact import check_atomic_fact
-        verify_atomic_claim = check_atomic_fact
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     dataset_path = f'datasets/{benchmark}/data.jsonl'
+    
+    # TEST: Modify dataset_path to handle decontextualized dataset
+    if benchmark == 'vifactcheck_decontextualized':
+        dataset_path = 'datasets/vifactcheck/vifactcheck_decontextualized.jsonl'
 
     if not os.path.exists(dataset_path):
         print(f"Error: Dataset file not found: {dataset_path}")
