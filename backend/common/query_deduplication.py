@@ -11,12 +11,12 @@ class QueryDeduplicator:
     Prevents wasting API calls on semantically similar searches.
     """
 
-    def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", threshold: float = 0.85):
+    def __init__(self, model_name: str = "dangvantuan/vietnamese-document-embedding", threshold: float = 0.85):
         """
-        Initialize deduplicator with lightweight multilingual model.
+        Initialize deduplicator with Vietnamese document embedding model (8192 token context).
 
         Args:
-            model_name: HuggingFace model for Vietnamese embeddings (default: lightweight multilingual)
+            model_name: HuggingFace model for Vietnamese embeddings (default: vietnamese-document-embedding)
             threshold: Cosine similarity threshold (0-1) for duplicates
         """
         self.threshold = threshold
@@ -37,10 +37,10 @@ class QueryDeduplicator:
         try:
             # Try sentence-transformers first (much faster)
             from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer(self.model_name)
+            self.model = SentenceTransformer(self.model_name, trust_remote_code=True)
             self._use_sentence_transformers = True
             self._model_loaded = True
-            print(f"Loaded lightweight model: {self.model_name}")
+            print(f"Loaded Vietnamese embedding model: {self.model_name}")
             return
         except Exception as e:
             print(f"Could not load sentence-transformers: {e}")
