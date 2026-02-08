@@ -42,7 +42,7 @@ except ImportError as e:
     KNOWLEDGE_PLACEHOLDER = '[KNOWLEDGE]'
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-sbert_model = SentenceTransformer('all-MiniLM-L6-v2').to(device)
+sbert_model = SentenceTransformer('dangvantuan/vietnamese-document-embedding', trust_remote_code=True).to(device)
 
 
 @dataclasses.dataclass()
