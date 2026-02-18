@@ -122,11 +122,40 @@ ANTHROPIC_API_KEY=your-anthropic-api-key-here
 # Serper API Key (for web search) - Get from: https://serper.dev/api-key
 SERPER_API_KEY=your-serper-api-key-here
 
+# Local Ollama URL (for running models locally)
+LOCAL_OLLAMA_URL=http://localhost:8001
+
 # Random Seed
 RANDOM_SEED=1
 ```
 
 **Important:** The `.env` file is already added to `.gitignore` to prevent accidentally committing your API keys.
+
+### 🖥️ Local LLM Setup (Optional)
+
+Run models locally using Ollama with Docker/Podman for **free, private inference**:
+
+```bash
+# Navigate to LLM directory
+cd ../llm
+
+# Start Ollama server with Docker Compose
+docker-compose up -d
+
+# Verify server is running
+curl http://localhost:8001/api/tags
+
+# Pull a model (e.g., gemma3:4b)
+docker exec -it ollama ollama pull gemma3:4b
+```
+
+**Available local models:**
+- `gemma3:4b` - Fast, 4B parameters (~2.5GB)
+- `llama3.2:3b` - Efficient, 3B parameters (~2GB)
+- `qwen2.5:7b` - High quality, 7B parameters (~4GB)
+- `phi3.5:latest` - Balanced performance (~2GB)
+
+See [llm/README.md](../llm/README.md) for detailed setup instructions.
 
 ### Running FIRE
 
@@ -187,11 +216,16 @@ python run_fire.py --model <model-name> --dataset <dataset-name>
   - Anthropic: `claude-3-5-sonnet-20240620`, `claude-3-opus`, `claude-3-haiku`
   - Groq: `groq/llama-3.1-70b-versatile` (ultra-fast)
   - Google: `gemini/gemini-1.5-flash` (fast & free)
+  - Local: `ollama/gemma3:4b`, `ollama/llama3.2:3b`, `ollama/qwen2.5:7b` (free, private)
+- `--provider`: Provider to use (optional, default: auto-detect)
+  - Options: `openai`, `anthropic`, `groq`, `gemini`, `local`
+  - Example: `--provider local --model gemma3:4b`
 - `--dataset`: Dataset to evaluate (required)
-  - `factcheck_bench`: Factcheck-Bench dataset
-  - `bingcheck`: BingCheck dataset
-  - `factool_qa`: FacTool-QA dataset
-  - `felm_wk`: FELM-WK dataset
+  - `factcheck_bench`: Factcheck-Bench dataset (631 claims)
+  - `bingcheck`: BingCheck dataset (142 claims)
+  - `factool_qa`: FacTool-QA dataset (233 claims)
+  - `felm_wk`: FELM-WK dataset (184 claims)
+  - `vifactcheck`: Vietnamese ViFactCheck dataset (20 claims)
 - `--framework`: Framework to use (default: `fire`)
   - Options: `fire`, `safe`
 - `--limit`: Limit number of claims to process (optional)
@@ -213,11 +247,30 @@ python run_fire.py --model claude-3-5-sonnet-20240620 --dataset bingcheck
 # Run with Groq (ultra-fast)
 python run_fire.py --model groq/llama-3.1-70b-versatile --dataset factcheck_bench --limit 5
 
+# Run with local Ollama model (free, private)
+python run_fire.py --provider local --model gemma3:4b --dataset vifactcheck
+python run_fire.py --provider local --model llama3.2:3b --dataset factcheck_bench --limit 5
+
 # Run SAFE framework instead of FIRE
 python run_fire.py --model gpt-4o-mini --dataset factcheck_bench --framework safe
 
 # Specify custom output directory
 python run_fire.py --model gpt-4o-mini --dataset factcheck_bench --output-dir my_results
+```
+
+#### 📦 Download ViFactCheck Dataset
+
+Download and prepare the Vietnamese fact-checking dataset:
+
+```bash
+# Download test split
+python common/vifactcheck_loader.py --split test
+
+# Download all splits with statistics
+python common/vifactcheck_loader.py --split all --stats --samples 5
+
+# Include NEI (Not Enough Info) samples
+python common/vifactcheck_loader.py --split test --include-nei
 ```
 
 #### ⚡ Performance Testing
