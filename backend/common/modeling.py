@@ -1,65 +1,59 @@
-import os
 import litellm
 from typing import Optional, Dict, Tuple, Any
 from common import utils
+from common import shared_config
+from common.shared_config import LOCAL_OLLAMA_URL
 from common.prompts import FACT_CHECK_SYSTEM_PROMPT
 
 litellm.suppress_debug_info = True
 litellm.drop_params = True
 
 
-# Default local Ollama endpoint
-LOCAL_OLLAMA_URL = os.getenv('LOCAL_OLLAMA_URL', 'http://localhost:8001')
-
-
 class Model:
     def __init__(self, model_name: Optional[str] = None, temperature: Optional[float] = None, 
                  max_tokens: Optional[int] = None, show_responses: bool = False, 
                  show_prompts: bool = False, api_key: Optional[str] = None, base_url: Optional[str] = None) -> None:
-        self.model_name = self._parse_model_name(model_name or os.getenv('DEFAULT_MODEL_NAME', 'openai/gpt-4o-mini'))
-        self.temperature = temperature if temperature is not None else float(os.getenv('DEFAULT_TEMPERATURE', '0.5'))
-        self.max_tokens = max_tokens if max_tokens is not None else int(os.getenv('DEFAULT_MAX_TOKENS', '2048'))
+        self.model_name = self._parse_model_name(model_name or shared_config.model_name)
+        self.temperature = temperature if temperature is not None else shared_config.default_temperature
+        self.max_tokens = max_tokens if max_tokens is not None else shared_config.default_max_tokens
         self.show_responses = show_responses
         self.show_prompts = show_prompts
         self.api_key = api_key
-        self.base_url = base_url
+        self.base_url = base_url if base_url is not None else shared_config.base_url
         self._setup_api_keys()
         self._setup_local_ollama()
         
     
     def _parse_model_name(self, model_name: str) -> str:
+        if '/' in model_name:
+            return model_name
         if ':' in model_name:
             org, model_id = model_name.split(':', 1)
             provider_map = {
-                'openai': 'openai', 
-                'anthropic': 'anthropic', 
+                'openai': 'openai',
+                'anthropic': 'anthropic',
                 'hf': 'huggingface',
                 'local': 'ollama',
                 'ollama': 'ollama',
             }
             provider = provider_map.get(org, org)
             return f"{provider}/{model_id}"
-        elif '/' in model_name:
-            return model_name
-        else:
-            return f"openai/{model_name}"
+        return f"openai/{model_name}"
     
     def _setup_api_keys(self) -> None:
         if not self.api_key:
             provider = self.model_name.split('/')[0].lower()
             key_map = {
-                'openai': 'OPENAI_API_KEY',
-                'anthropic': 'ANTHROPIC_API_KEY',
-                'groq': 'GROQ_API_KEY',
-                'gemini': 'GEMINI_API_KEY',
-                'google': 'GEMINI_API_KEY',
-                'azure': 'AZURE_API_KEY',
-                'cohere': 'COHERE_API_KEY',
-                'together': 'TOGETHER_API_KEY',
+                'openai': shared_config.openai_api_key,
+                'anthropic': shared_config.anthropic_api_key,
+                'groq': shared_config.groq_api_key,
+                'gemini': shared_config.gemini_api_key,
+                'google': shared_config.gemini_api_key,
+                'azure': shared_config.azure_api_key,
+                'cohere': shared_config.cohere_api_key,
+                'together': shared_config.together_api_key,
             }
-            env_key = key_map.get(provider)
-            if env_key:
-                self.api_key = os.getenv(env_key, '')
+            self.api_key = key_map.get(provider, '')
     
     def _setup_local_ollama(self) -> None:
         """Configure base URL for local Ollama if using ollama provider."""

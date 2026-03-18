@@ -5,9 +5,11 @@ Supports both cloud LLMs (OpenAI, Anthropic) and local LLMs (Ollama).
 
 import os
 import json
+import argparse
 from typing import Literal, Optional
 from openai import OpenAI
 from anthropic import Anthropic
+from tqdm import tqdm
 
 # Add import for ViFactCheckLoader
 from vifactcheck_loader import ViFactCheckLoader
@@ -64,11 +66,13 @@ class Decontextualizer:
         return f"""NHIỆM VỤ: Viết lại 'Tuyên bố' thành một câu độc lập, có thể kiểm chứng được bằng cách sử dụng 'Ngữ cảnh' được cung cấp.
 
 QUY TẮC:
-1. Thay thế đại từ (anh ấy, cô ấy, họ, nó, các đối tượng, người này, v.v.) bằng tên hoặc thực thể cụ thể
+1. Thay thế đại từ (anh ấy, cô ấy, họ, nó, người này...) và các cụm từ chỉ định mơ hồ (hành động này, việc này, điều đó, tại đây, lúc đó...) bằng danh từ/thực thể/mô tả cụ thể từ ngữ cảnh.
 2. BẮT BUỘC bao gồm ngày tháng cụ thể nếu có trong ngữ cảnh (ví dụ: "tháng 2-2023", "ngày 21-3", "ngày 24-3")
-3. Bao gồm địa điểm hoặc sự kiện cụ thể được đề cập trong ngữ cảnh
+3. Nếu "hành động này" đề cập đến một sự việc, hãy tóm tắt ngắn gọn sự việc đó (ví dụ: "Việc bác sĩ A hiến máu" thay vì "Hành động này").
 4. KHÔNG thay đổi ý nghĩa hoặc giá trị chân lý của tuyên bố
-5. Chỉ xuất ra tuyên bố đã được viết lại, KHÔNG thêm giải thích
+5. Nếu thiếu thông tin trong ngữ cảnh, giữ nguyên và KHÔNG suy đoán
+6. Giữ nguyên số liệu, tên riêng, tổ chức; KHÔNG thêm thực thể mới
+7. Chỉ xuất ra 1 câu tuyên bố đã được viết lại, KHÔNG thêm giải thích hay dấu ngoặc kép
 
 VÍ DỤ:
 - Ngữ cảnh: "Ngày 15-1-2024, Thủ tướng Phạm Minh Chính đã ký quyết định..."
@@ -127,14 +131,20 @@ TUYÊN BỐ ĐỘC LẬP:"""
         records = [data] if isinstance(data, dict) else data
         
         processed_records = []
-        for i, record in enumerate(records):
-            print(f"Processing record {i+1}/{len(records)}...")
+        for i, record in enumerate(tqdm(records, desc="Decontextualizing records")):
             
-            original_claim = record['claim']
-            context = record['context']
+            original_claim = record.get('claim', '')
+            context = record.get('context', '')
+            evidence = record.get('evidence', context)
+            label = record.get('label', '')
+
+            if isinstance(label, int):
+                mapped_label = {0: 'true', 1: 'false', 2: 'nei'}.get(label, 'nei')
+            else:
+                mapped_label = str(label).lower()
             
             try:
-                standalone_claim = self.decontextualize(original_claim, context)
+                standalone_claim = self.decontextualize(original_claim, context or evidence)
                 
                 processed_record = {
                     'id': i,  # Add sample index for reference
@@ -162,13 +172,18 @@ TUYÊN BỐ ĐỘC LẬP:"""
                 })
         
         # Save processed dataset
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(processed_records, f, ensure_ascii=False, indent=2)
+        if output_path.lower().endswith('.jsonl'):
+            with open(output_path, 'w', encoding='utf-8') as f:
+                for record in processed_records:
+                    f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        else:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(processed_records, f, ensure_ascii=False, indent=2)
         
         print(f"Processed {len(processed_records)} records")
         print(f"Saved to {output_path}")
 
-    def process_vifactcheck_dataset(self, split: str = "test", output_path: str = "vifactcheck_decontextualized.jsonl", include_nei: bool = False):
+    def process_vifactcheck_dataset(self, split: str = "test", output_path: str = "vifactcheck_decontextualized.jsonl", include_nei: bool = True):
         """
         Process ViFactCheck dataset and save decontextualized versions.
         
@@ -181,19 +196,15 @@ TUYÊN BỐ ĐỘC LẬP:"""
         dataset = loader.load_dataset(split=split)
         
         processed_records = []
-        for i, sample in enumerate(dataset):
-            print(f"Processing sample {i+1}/{len(dataset)}...")
+        for i, sample in enumerate(tqdm(dataset, desc=f"Decontextualizing {split} split")):
             
             original_claim = sample.get('Statement', sample.get('claim', ''))
             evidence = sample.get('Evidence', sample.get('evidence', ''))
             label = sample.get('labels', sample.get('label', ''))
             context = sample.get('Context', sample.get('context', ''))
             
-            # Skip if no claim or evidence
-            print(i, not original_claim or not evidence)
-            print(original_claim)
-            print(evidence)
-            if not original_claim or not evidence:
+            # Skip if no claim or context/evidence
+            if not original_claim or not (context or evidence):
                 continue
             
             # Map label for filtering
@@ -206,7 +217,7 @@ TUYÊN BỐ ĐỘC LẬP:"""
                 continue
             
             try:
-                standalone_claim = self.decontextualize(original_claim, evidence)
+                standalone_claim = self.decontextualize(original_claim, context or evidence)
                 
                 processed_record = {
                     'claim': standalone_claim,
@@ -245,38 +256,38 @@ TUYÊN BỐ ĐỘC LẬP:"""
 
 # Example usage
 if __name__ == "__main__":
-    # Option 1: Using local Ollama
-    config_local = DecontextualizeConfig(
-        provider="ollama",
-        model="gemma3:4b",
-        temperature=0.3
-    )
-    
-    # Option 2: Using OpenAI
-    # config_cloud = DecontextualizeConfig(
-    #     provider="openai",
-    #     model="gpt-4o-mini",
-    #     temperature=0.3
-    # )
-    
-    # Option 3: Using Anthropic
-    # config_cloud = DecontextualizeConfig(
-    #     provider="anthropic",
-    #     model="claude-3-5-sonnet-20241022",
-    #     temperature=0.3
-    # )
-    
-    decontextualizer = Decontextualizer(config_local)
-    
-    # # Process sample data (updated paths for running from vifactcheck directory)
-    # decontextualizer.process_dataset(
-    #     dataset_path="sample_data.json",
-    #     output_path="sample_data_decontextualized.json"
-    # )
+    parser = argparse.ArgumentParser(description="Decontextualize Vietnamese claims")
+    parser.add_argument("--dataset", type=str, default="", help="Path to input JSON file (single or list). If set, runs process_dataset.")
+    parser.add_argument("--output", type=str, default="", help="Output path. Defaults based on mode if omitted.")
+    parser.add_argument("--split", type=str, default="test", help="ViFactCheck split: train/validation/test")
+    parser.add_argument("--exclude-nei", action="store_true", help="Exclude NEI samples for ViFactCheck mode")
+    parser.add_argument("--provider", type=str, default="ollama", choices=["openai", "anthropic", "ollama"], help="LLM provider")
+    parser.add_argument("--model", type=str, default="gemma3:4b", help="Model name")
+    parser.add_argument("--temperature", type=float, default=0.3, help="Sampling temperature")
+    parser.add_argument("--max-tokens", type=int, default=512, help="Max output tokens")
+    parser.add_argument("--base-url", type=str, default=None, help="Base URL for provider (e.g., Ollama)")
+    args = parser.parse_args()
 
-    # Process ViFactCheck dataset
-    decontextualizer.process_vifactcheck_dataset(
-        split="test",
-        output_path="vifactcheck_decontextualized.jsonl",
-        include_nei=True, # without NEI
+    config = DecontextualizeConfig(
+        provider=args.provider,
+        model=args.model,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+        base_url=args.base_url,
     )
+
+    decontextualizer = Decontextualizer(config)
+
+    if args.dataset:
+        output_path = args.output or "sample_data_decontextualized.json"
+        decontextualizer.process_dataset(
+            dataset_path=args.dataset,
+            output_path=output_path,
+        )
+    else:
+        output_path = args.output or "vifactcheck_decontextualized.jsonl"
+        decontextualizer.process_vifactcheck_dataset(
+            split=args.split,
+            output_path=output_path,
+            include_nei=not args.exclude_nei,
+        )
