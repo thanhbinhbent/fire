@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv
 
@@ -26,3 +25,7 @@ litellm_log = os.getenv('LITELLM_LOG', '')
 SEMANTIC_MODEL_CACHE = True
 SEMANTIC_MODEL_NAME = os.getenv('SEMANTIC_MODEL_NAME', 'paraphrase-multilingual-MiniLM-L12-v2')
 QUERY_DEDUP_THRESHOLD = float(os.getenv('QUERY_DEDUP_THRESHOLD', '0.85'))
+
+# Thêm vào cuối file
+ollama_base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+enable_thinking = os.getenv('ENABLE_THINKING', 'false').lower() == 'true'

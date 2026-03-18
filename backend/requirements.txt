@@ -1,6 +1,9 @@
 # LiteLLM - Unified interface for 100+ LLMs
 litellm>=1.80.0
 
+# Structured logging
+loguru>=0.5.0
+
 # Note: LiteLLM replaces the need for individual LLM SDKs
 # Legacy langchain dependencies (may cause conflicts, consider removing)
 # langchain_anthropic==0.2.4

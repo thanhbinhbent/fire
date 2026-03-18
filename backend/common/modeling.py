@@ -11,7 +11,8 @@ litellm.drop_params = True
 class Model:
     def __init__(self, model_name: Optional[str] = None, temperature: Optional[float] = None, 
                  max_tokens: Optional[int] = None, show_responses: bool = False, 
-                 show_prompts: bool = False, api_key: Optional[str] = None, base_url: Optional[str] = None) -> None:
+                 show_prompts: bool = False, api_key: Optional[str] = None, base_url: Optional[str] = None, 
+                 enable_thinking: bool = False) -> None:
         self.model_name = self._parse_model_name(model_name or os.getenv('DEFAULT_MODEL_NAME', 'openai/gpt-4o-mini'))
         self.temperature = temperature if temperature is not None else float(os.getenv('DEFAULT_TEMPERATURE', '0.5'))
         self.max_tokens = max_tokens if max_tokens is not None else int(os.getenv('DEFAULT_MAX_TOKENS', '2048'))
@@ -19,10 +20,13 @@ class Model:
         self.show_prompts = show_prompts
         self.api_key = api_key
         self.base_url = base_url
+        self.enable_thinking = enable_thinking
         self._setup_api_keys()
         
     
     def _parse_model_name(self, model_name: str) -> str:
+        if '/' in model_name:
+            return model_name
         if ':' in model_name:
             org, model_id = model_name.split(':', 1)
             provider_map = {'openai': 'openai', 'anthropic': 'anthropic', 'hf': 'huggingface'}
@@ -72,6 +76,17 @@ class Model:
             if self.base_url:
                 kwargs["api_base"] = self.base_url
             
+            # # Thêm support cho Ollama thinking mode
+            # if self.model_name.startswith('ollama/'):
+            #     kwargs["api_base"] = self.base_url or os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+                
+            #     # Ollama options for thinking mode
+            #     if self.enable_thinking:
+            #         kwargs["num_ctx"] = 8192  # Larger context for thinking
+            #         kwargs["num_predict"] = 2048
+            #     else:
+            #         kwargs["num_ctx"] = 4096  # Smaller for raw mode
+            
             response = litellm.completion(**kwargs)
             content = response.choices[0].message.content
             
@@ -108,6 +123,7 @@ class Model:
             'show_prompts': self.show_prompts,
             'api_key_set': bool(self.api_key),
             'base_url': self.base_url or 'default',
+            'enable_thinking': self.enable_thinking,
         }
         print(utils.to_readable_json(settings))
     

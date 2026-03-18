@@ -11,7 +11,7 @@ from tqdm import tqdm
 from langchain_community.callbacks.manager import get_openai_callback
 from common.modeling import Model
 from common.shared_config import openai_api_key, serper_api_key, anthropic_api_key
-from common.utils import calculate_cost_claude
+# from common.utils import calculate_cost_claude
 
 
 def main():
@@ -28,6 +28,8 @@ def main():
                         help='Limit number of claims to process (default: all)')
     parser.add_argument('--output-dir', type=str, default='results',
                         help='Output directory for results (default: results)')
+    parser.add_argument('--thinking', action='store_true', default=True,
+                        help='Enable thinking mode for models that support it (default: False)')
 
     args = parser.parse_args()
 
@@ -78,11 +80,12 @@ def main():
     print(f"Model:     {model_name_full}")
     print(f"Dataset:   {benchmark}")
     print(f"Framework: {framework}")
+    print(f"Thinking:  {'Enabled' if args.thinking else 'Disabled'}")
     print(f"=" * 60)
 
     with get_openai_callback() as cb:
         print(f'\nRunning model: {model_name_full}')
-        rater = Model(model_name_full)
+        rater = Model(model_name_full, enable_thinking=args.thinking)
         failed_cnt = 0
         model_name = model_name_full.split(':')[-1].split('/')[-1]
 
@@ -91,7 +94,8 @@ def main():
             'output_tokens': 0,
         }
 
-        output_file = f'{args.output_dir}/{framework}_{benchmark}_{model_name}.jsonl'
+        mode_suffix = '_thinking' if args.thinking else ''
+        output_file = f'{args.output_dir}/{framework}{mode_suffix}_{benchmark}_{model_name}.jsonl'
 
         with open(dataset_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()

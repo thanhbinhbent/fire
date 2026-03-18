@@ -41,7 +41,8 @@ except ImportError as e:
     STATEMENT_PLACEHOLDER = '[STATEMENT]'
     KNOWLEDGE_PLACEHOLDER = '[KNOWLEDGE]'
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu" #"cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
 sbert_model = SentenceTransformer('dangvantuan/vietnamese-document-embedding', trust_remote_code=True).to(device)
 
 
