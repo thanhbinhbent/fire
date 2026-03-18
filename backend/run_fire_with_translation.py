@@ -12,7 +12,7 @@ from langchain_community.callbacks.manager import get_openai_callback
 from common.modeling import Model
 from common.shared_config import openai_api_key, serper_api_key, anthropic_api_key
 from common.utils import calculate_cost_claude
-
+from common.translator import Translator
 
 def main():
     parser = argparse.ArgumentParser(
@@ -28,6 +28,8 @@ def main():
                         help='Limit number of claims to process (default: all)')
     parser.add_argument('--output-dir', type=str, default='results',
                         help='Output directory for results (default: results)')
+    parser.add_argument("--use-translate", action="store_true",
+                        help="Use translated claim for fire check")
 
     args = parser.parse_args()
 
@@ -56,6 +58,7 @@ def main():
 
     if framework == 'fire':
         from eval.fire.verify_atomic_claim import verify_atomic_claim
+        from eval.fire.verify_atomic_claim_original import verify_atomic_claim_original
     elif framework == 'safe':
         from eval.safe.rate_atomic_fact import check_atomic_fact
         verify_atomic_claim = check_atomic_fact
@@ -79,6 +82,13 @@ def main():
     print(f"Dataset:   {benchmark}")
     print(f"Framework: {framework}")
     print(f"=" * 60)
+
+    if (args.use_translate):
+        translator = Translator(cache=True)
+    total_search_calls = 0
+    total_inference_time = 0
+    y_true = []
+    y_pred = []
 
     with get_openai_callback() as cb:
         print(f'\nRunning model: {model_name_full}')
@@ -104,11 +114,24 @@ def main():
         with open(output_file, 'w', encoding='utf-8') as fout:
             for line in tqdm(lines, desc="Processing claims"):
                 data = json.loads(line)
-                claim = data['claim']
+                claim_vi = data['claim']
                 label = data['label']
+                
+                start_time = time.time()
+                if (agrs.use_translate):
+                    # ===== TRANSLATE =====
+                    claim_en = translator.vi_to_en(claim_vi)
+                    print(f"\nOriginal (VI): {claim_vi}")
+                    print(f"Translated (EN): {claim_en}")
 
                 try:
-                    result, searches, usage = verify_atomic_claim(claim, rater)
+                    if (agrs.use_translate):
+                        result, searches, usage = verify_atomic_claim_original(claim_en, rater)
+                    else:
+                        result, searches, usage = verify_atomic_claim(claim_vi, rater)
+
+                    inference_time = time.time() - start_time
+                    total_inference_time += inference_time
 
                     if usage is not None:
                         total_usage['input_tokens'] += usage.get(
@@ -120,15 +143,34 @@ def main():
                         failed_cnt += 1
                         continue
 
+                    result_dict = dataclasses.asdict(result)
+                    print(f"Result: {result_dict}")
+                    print(f"True label: {label}")
+
+                    pred_label = (
+                        result_dict.get("answer")
+                        or result_dict.get("final_answer")
+                        or result_dict.get("verdict")
+                        or result_dict.get("label")
+                        or result_dict.get("prediction")
+                    )
+
+                    if pred_label:
+                        y_true.append(label)
+                        y_pred.append(pred_label)
+
                     fout.write(json.dumps({
-                        'claim': claim,
-                        'label': label,
-                        'result': dataclasses.asdict(result),
-                        'searches': searches
+                        "claim_vi": claim_vi,
+                        "claim_en": claim_en,
+                        "label": label,
+                        "prediction": pred_label,
+                        "result": result_dict,
+                        "searches": searches,
+                        "inference_time": inference_time
                     }, ensure_ascii=False) + '\n')
 
                 except Exception as e:
-                    print(f"\nError processing claim: {claim[:50]}...")
+                    print(f"\nError processing claim: {claim_vi[:50]}...")
                     print(f"   Error: {str(e)}")
                     failed_cnt += 1
                     continue
