@@ -18,3 +18,7 @@ __init__.py
 
 #ignore all file start test_
 test_*.py
+
+# dataset
+datasets/*/*.json
+datasets/*/*.jsonl

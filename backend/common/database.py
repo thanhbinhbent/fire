@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional, Dict, List
 from pathlib import Path
 import threading
+from common import shared_config
 
 
 class FactCheckDB:
@@ -12,7 +13,7 @@ class FactCheckDB:
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls, db_path: str = "dev.db"):
+    def __new__(cls, db_path: str = shared_config.factcheck_db_path):
         """Singleton pattern to ensure one database connection."""
         if cls._instance is None:
             with cls._lock:
@@ -20,7 +21,7 @@ class FactCheckDB:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, db_path: str = "dev.db"):
+    def __init__(self, db_path: str = shared_config.factcheck_db_path):
         if hasattr(self, '_initialized'):
             return
         
