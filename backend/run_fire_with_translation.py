@@ -7,6 +7,7 @@ import os
 import json
 import argparse
 import dataclasses
+import time
 from tqdm import tqdm
 from langchain_community.callbacks.manager import get_openai_callback
 from common.modeling import Model
@@ -116,16 +117,17 @@ def main():
                 data = json.loads(line)
                 claim_vi = data['claim']
                 label = data['label']
+                claim_en = None
                 
                 start_time = time.time()
-                if (agrs.use_translate):
+                if (args.use_translate):
                     # ===== TRANSLATE =====
                     claim_en = translator.vi_to_en(claim_vi)
                     print(f"\nOriginal (VI): {claim_vi}")
                     print(f"Translated (EN): {claim_en}")
 
                 try:
-                    if (agrs.use_translate):
+                    if (args.use_translate):
                         result, searches, usage = verify_atomic_claim_original(claim_en, rater)
                     else:
                         result, searches, usage = verify_atomic_claim(claim_vi, rater)
