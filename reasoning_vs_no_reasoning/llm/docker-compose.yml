@@ -1,0 +1,22 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "8001:11434"
+    volumes:
+      # Persist downloaded models
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    # For NVIDIA GPU support, uncomment below:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ollama_data:

@@ -33,11 +33,11 @@ try:
     os.environ["GEMINI_API_KEY"] = shared_config.gemini_api_key
     
     rater = Model(
-        model_name=shared_config.default_model_name,
+        model_name=shared_config.model_name,
         temperature=shared_config.default_temperature,
         max_tokens=shared_config.default_max_tokens
     )
-    print(f"Model: {shared_config.default_model_name}, Temp: {shared_config.default_temperature}")
+    print(f"Model: {shared_config.model_name}, Temp: {shared_config.default_temperature}")
 except Exception as e:
     print(f"Model init failed: {e}")
 
@@ -50,6 +50,7 @@ class FactCheckRequest(BaseModel):
 
 class FactCheckResponse(BaseModel):
     verdict: str
+    raw_verdict: Optional[str] = None
     explanation: str
     sources: Optional[List[Dict]] = None
     confidence: Optional[float] = None
@@ -71,7 +72,7 @@ app.add_middleware(
 async def root():
     return {
         "message": "Vietnamese Fact Checking API",
-        "model": shared_config.default_model_name,
+        "model": shared_config.model_name,
         "vietnamese_support": VIETNAMESE_SUPPORT,
         "modes": ["fast (1-5s, 75% acc)", "accurate (20-30s, 80% acc)"],
     }
@@ -85,7 +86,7 @@ async def check_fact(request: FactCheckRequest):
     try:
         model_instance = rater
         
-        if request.model and request.model != shared_config.default_model_name:
+        if request.model and request.model != shared_config.model_name:
             try:
                 model_instance = Model(
                     model_name=request.model,
@@ -128,6 +129,7 @@ async def check_fact(request: FactCheckRequest):
             
             return FactCheckResponse(
                 verdict=verdict_label,
+                raw_verdict=result.get('verdict', 'Unknown'),
                 explanation=result.get('reasoning', ''),
                 sources=result.get('sources', []),
                 confidence=confidence_score,
@@ -233,6 +235,7 @@ async def check_fact(request: FactCheckRequest):
                 
                 return FactCheckResponse(
                     verdict=verdict_label,
+                    raw_verdict=verdict,
                     explanation=explanation,
                     sources=sources,
                     confidence=confidence_data,
@@ -255,7 +258,7 @@ async def check_fact(request: FactCheckRequest):
 async def health():
     return {
         "status": "healthy",
-        "model": shared_config.default_model_name,
+        "model": shared_config.model_name,
         "model_loaded": rater is not None,
     }
 
@@ -263,7 +266,7 @@ async def health():
 @app.get("/api/stats")
 async def get_stats():
     stats = {
-        "model": shared_config.default_model_name,
+        "model": shared_config.model_name,
         "vietnamese_support": VIETNAMESE_SUPPORT,
     }
     
@@ -280,4 +283,5 @@ if __name__ == "__main__":
     import uvicorn
     print("Starting API server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
